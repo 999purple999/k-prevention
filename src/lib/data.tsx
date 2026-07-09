@@ -125,6 +125,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [isUnlocked, userId, reload]);
 
   const timers = useRef<Partial<Record<DataType, ReturnType<typeof setTimeout>>>>({});
+  const pending = useRef<Partial<Record<DataType, unknown>>>({});
+
+  const persist = useCallback(
+    async (type: DataType, value: unknown) => {
+      setSavingType(type);
+      try {
+        const { ciphertext, iv } = await encryptFor(type, value);
+        await api.putData(type, ciphertext, iv);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Salvataggio fallito');
+      } finally {
+        setSavingType((s) => (s === type ? null : s));
+      }
+    },
+    [encryptFor],
+  );
+
   const save = useCallback(
     async <K extends DataType>(type: K, value: UserData[K]) => {
       // Aggiorna subito lo stato locale; ripersiste (cifrando) con debounce per tipo.
@@ -134,21 +151,45 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return next;
       });
       if (DEMO) return; // in demo si persiste solo in localStorage
+      pending.current[type] = value;
       if (timers.current[type]) clearTimeout(timers.current[type]);
-      timers.current[type] = setTimeout(async () => {
-        setSavingType(type);
-        try {
-          const { ciphertext, iv } = await encryptFor(type, value);
-          await api.putData(type, ciphertext, iv);
-        } catch (e) {
-          setError(e instanceof Error ? e.message : 'Salvataggio fallito');
-        } finally {
-          setSavingType((s) => (s === type ? null : s));
-        }
+      timers.current[type] = setTimeout(() => {
+        delete timers.current[type];
+        const v = pending.current[type];
+        delete pending.current[type];
+        void persist(type, v);
       }, 600);
     },
-    [encryptFor],
+    [persist],
   );
+
+  // Flush dei salvataggi in sospeso quando la tab passa in background o si smonta:
+  // così una modifica seguita da chiusura/cambio-scheda non viene persa nel debounce.
+  const flushPending = useCallback(() => {
+    for (const type of Object.keys(pending.current) as DataType[]) {
+      const t = timers.current[type];
+      if (t) {
+        clearTimeout(t);
+        delete timers.current[type];
+      }
+      const v = pending.current[type];
+      delete pending.current[type];
+      void persist(type, v);
+    }
+  }, [persist]);
+
+  useEffect(() => {
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') flushPending();
+    };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('beforeunload', flushPending);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('beforeunload', flushPending);
+      flushPending();
+    };
+  }, [flushPending]);
 
   const buildSimulationInput = useCallback((): SimulationInput | null => {
     if (!data) return null;

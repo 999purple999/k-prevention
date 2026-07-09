@@ -10,13 +10,13 @@ import {
   signSession,
   newId,
 } from '../lib/serverCrypto.js';
-import { setSessionCookie, clearSessionCookie, requireAuth, rateLimiter } from '../lib/http.js';
+import { setSessionCookie, clearSessionCookie, requireAuth, rateLimiter, ah } from '../lib/http.js';
 
 export function authRouter(store) {
   const r = Router();
 
   // POST /api/auth/register — crea l'utente. Il server ri-hasha l'authProof.
-  r.post('/register', rateLimiter({ windowMs: 60_000, max: 10 }), async (req, res) => {
+  r.post('/register', rateLimiter({ windowMs: 60_000, max: 10 }), ah(async (req, res) => {
     const { email, authProof, authSalt, kekSalt, wrappedDek, dekIv } = req.body || {};
     if (!email || !authProof || !authSalt || !kekSalt || !wrappedDek || !dekIv) {
       return res.status(400).json({ error: 'campi mancanti' });
@@ -39,20 +39,20 @@ export function authRouter(store) {
     const token = await signSession(id);
     setSessionCookie(res, token);
     res.status(201).json({ userId: id });
-  });
+  }));
 
   // POST /api/auth/salts — restituisce i sali. Per email sconosciute: sali FINTI ma
   // deterministici (stessa forma), così l'endpoint non rivela chi è iscritto.
-  r.post('/salts', rateLimiter({ windowMs: 60_000, max: 30 }), async (req, res) => {
+  r.post('/salts', rateLimiter({ windowMs: 60_000, max: 30 }), ah(async (req, res) => {
     const { email } = req.body || {};
     if (!email) return res.status(400).json({ error: 'email mancante' });
     const user = await store.getUserByEmailLookup(emailLookup(email));
     if (user) return res.json({ authSalt: user.auth_salt, kekSalt: user.kek_salt });
     return res.json(fakeSalts(email));
-  });
+  }));
 
   // POST /api/auth/login — verifica in tempo costante; restituisce wrappedDek + dekIv.
-  r.post('/login', rateLimiter({ windowMs: 60_000, max: 20 }), async (req, res) => {
+  r.post('/login', rateLimiter({ windowMs: 60_000, max: 20 }), ah(async (req, res) => {
     const { email, authProof } = req.body || {};
     if (!email || !authProof) return res.status(400).json({ error: 'credenziali mancanti' });
     const user = await store.getUserByEmailLookup(emailLookup(email));
@@ -66,7 +66,7 @@ export function authRouter(store) {
     const token = await signSession(user.id);
     setSessionCookie(res, token);
     res.json({ userId: user.id, wrappedDek: user.wrapped_dek, dekIv: user.dek_iv });
-  });
+  }));
 
   // POST /api/auth/logout
   r.post('/logout', (req, res) => {
@@ -75,14 +75,14 @@ export function authRouter(store) {
   });
 
   // GET /api/auth/session — stato sessione (per il bootstrap della SPA). Non espone segreti.
-  r.get('/session', requireAuth(), async (req, res) => {
+  r.get('/session', requireAuth(), ah(async (req, res) => {
     const user = await store.getUserById(req.userId);
     if (!user) return res.status(401).json({ error: 'sessione non valida' });
     res.json({ userId: user.id, wrappedDek: user.wrapped_dek, dekIv: user.dek_iv });
-  });
+  }));
 
   // PATCH /api/auth/password — cambio password: NESSUN dato viene ri-cifrato, cambiano 32 byte.
-  r.patch('/password', requireAuth(), async (req, res) => {
+  r.patch('/password', requireAuth(), ah(async (req, res) => {
     const { oldAuthProof, newAuthProof, newAuthSalt, newKekSalt, newWrappedDek, newDekIv } = req.body || {};
     if (!oldAuthProof || !newAuthProof || !newAuthSalt || !newKekSalt || !newWrappedDek || !newDekIv) {
       return res.status(400).json({ error: 'campi mancanti' });
@@ -99,7 +99,7 @@ export function authRouter(store) {
       dek_iv: newDekIv,
     });
     res.json({ ok: true });
-  });
+  }));
 
   return r;
 }

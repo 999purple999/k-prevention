@@ -176,31 +176,33 @@ pesante degli imprevisti, la convergenza e l'errore esplicito su un'aliquota man
 ## Deploy su Google Cloud Run
 
 Un solo comando fa build + deploy (Cloud Build; **non serve Docker in locale**). Firestore come persistenza.
+L'utente Francesco viene creato **automaticamente all'avvio del servizio** (`SEED_ON_START=1`), nello stesso
+processo del server: stesso `SERVER_SECRET` (nessun mismatch) e credenziali del service account (**non serve
+`gcloud auth application-default login`**). Il seed è idempotente: non sovrascrive un utente già presente.
 
+**Modo semplice — lo script:**
+```powershell
+gcloud auth login
+.\deploy.ps1 -Project "il-tuo-progetto"        # -FrancescoPassword "..." opzionale (altrimenti generata)
+```
+Lo script abilita le API, crea Firestore se manca, genera `SERVER_SECRET` + la password, fa il deploy e stampa
+URL e credenziali (salvate anche in `FRANCESCO_CREDENTIALS.txt`).
+
+**Modo manuale:**
 ```bash
-# 0. prerequisiti una tantum
 gcloud auth login
 gcloud config set project IL_TUO_PROGETTO
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com firestore.googleapis.com
-gcloud firestore databases create --location=eur3         # se non esiste già
+gcloud firestore databases create --location=eur3          # se non esiste già
 
-# 1. segreto di produzione (genera 32 byte)
-SERVER_SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")
-
-# 2. deploy (build da sorgente, un solo servizio)
+SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")
 gcloud run deploy k-prevention \
-  --source . \
-  --region europe-west1 \
-  --allow-unauthenticated \
-  --set-env-vars "STORE_BACKEND=firestore,SERVER_SECRET=$SERVER_SECRET"
-
-# 3. crea l'utente Francesco nel Firestore di produzione
-STORE_BACKEND=firestore GOOGLE_CLOUD_PROJECT=IL_TUO_PROGETTO FRANCESCO_PASSWORD="..." npm run seed
+  --source . --region europe-west1 --allow-unauthenticated \
+  --set-env-vars "STORE_BACKEND=firestore,SERVER_SECRET=$SECRET,SEED_ON_START=1,FRANCESCO_PASSWORD=scegli-una-password"
 ```
 
-Cloud Run restituisce l'URL `https://k-prevention-...-ew.a.run.app`. È presente `deploy.ps1` (Windows) che
-automatizza i passi 1–2. In alternativa il `Dockerfile` multi-stage consente `gcloud run deploy --image` o
-qualsiasi altro runtime a container.
+Cloud Run restituisce l'URL `https://k-prevention-...-ew.a.run.app`. Il `Dockerfile` multi-stage (Node 24)
+consente anche `gcloud run deploy --image` o qualsiasi altro runtime a container.
 
 > Nota di sicurezza: passare `SERVER_SECRET` via `--set-env-vars` è comodo per una demo. In produzione seria usa
 > **Secret Manager**: `--set-secrets SERVER_SECRET=kprev-secret:latest`.

@@ -2,6 +2,13 @@
 import { parse as parseCookie, serialize as serializeCookie } from 'cookie';
 import { verifySession } from './serverCrypto.js';
 
+/**
+ * Wrapper per handler async: Express 4 NON inoltra le promise rifiutate a next(), quindi
+ * un errore dello store lascerebbe la richiesta appesa. Questo lo cattura e lo passa
+ * all'error middleware. (In Express 5 non servirebbe.)
+ */
+export const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
+
 const COOKIE_NAME = 'kp_session';
 const isProd = () => process.env.NODE_ENV === 'production';
 
@@ -46,7 +53,9 @@ export function requireAuth() {
 export function rateLimiter({ windowMs, max }) {
   const hits = new Map();
   return (req, res, next) => {
-    const key = (req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || 'unknown') + ':' + req.path;
+    // req.ip è normalizzato da Express con `trust proxy` attivo (vedi app.js). Non è a prova
+    // di spoofing su multi-istanza — il limiter resta best-effort, come documentato nel README.
+    const key = (req.ip || req.socket.remoteAddress || 'unknown') + ':' + req.path;
     const now = Date.now();
     const arr = (hits.get(key) || []).filter((t) => now - t < windowMs);
     arr.push(now);

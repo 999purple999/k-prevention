@@ -11,7 +11,7 @@ const crypto = await import('../src/lib/crypto.ts');
 let store, server, base;
 
 beforeAll(async () => {
-  store = createMemoryStore();
+  store = await createMemoryStore();
   const app = createApp(store, { serveSpa: false });
   await new Promise((resolve) => {
     server = app.listen(0, resolve);
