@@ -12,6 +12,8 @@
     "dev:server": "cross-env NODE_ENV=development node --watch server/index.js",
     "dev:vite": "vite",
     "build": "vite build",
+    "build:demo": "cross-env VITE_DEMO=1 vite build --base ./ --outDir dist-demo",
+    "preview:demo": "vite preview --outDir dist-demo --port 8090",
     "start": "node server/index.js",
     "seed": "node server/seed.js",
     "typecheck": "tsc --noEmit",

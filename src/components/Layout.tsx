@@ -3,6 +3,7 @@ import { type ReactNode } from 'react';
 import { useSession } from '../lib/session.tsx';
 import { useData } from '../lib/data.tsx';
 import { Logo, ThemeToggle, EncryptionBadge } from './ui.tsx';
+import { DEMO } from '../lib/demo.ts';
 
 const nav = [
   { to: '/dashboard', label: 'Dashboard' },
@@ -83,6 +84,13 @@ export function Layout({ children }: { children: ReactNode }) {
         </nav>
       </header>
 
+      {DEMO && (
+        <div className="mx-auto mt-4 max-w-7xl px-4 sm:px-6">
+          <div className="rounded-xl px-4 py-2.5 text-center text-xs sm:text-left" style={{ background: 'rgb(var(--accent) / 0.08)', border: '1px solid rgb(var(--accent) / 0.25)', color: 'rgb(var(--text-dim))' }}>
+            <strong style={{ color: 'rgb(var(--accent))' }}>Demo pubblica</strong> · dati di esempio, tutto gira nel tuo browser (nessun backend). La versione completa gira su Google Cloud Run con cifratura end-to-end e account reali.
+          </div>
+        </div>
+      )}
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">{children}</main>
 
       <footer className="mx-auto max-w-7xl px-4 pb-10 pt-4 sm:px-6">

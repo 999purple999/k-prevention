@@ -618,7 +618,7 @@
   },
 
   "monteCarlo": {
-    "iterations": 2000,
+    "iterations": 10000,
     "seed": 20260101,
     "percentiles": [5, 10, 25, 50, 75, 90, 95],
     "convergenceCheck": { "enabled": true, "metric": "standardErrorOfMedian", "tolerance": 0.01 },

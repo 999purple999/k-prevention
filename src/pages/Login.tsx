@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSession } from '../lib/session.tsx';
 import { defaultUserData } from '../lib/data.tsx';
@@ -7,8 +7,11 @@ import { Logo, Spinner, ThemeToggle, EncryptionBadge } from '../components/ui.ts
 type Mode = 'login' | 'register';
 
 export function Login() {
-  const { login, register } = useSession();
+  const { login, register, isUnlocked } = useSession();
   const navigate = useNavigate();
+  useEffect(() => {
+    if (isUnlocked) navigate('/dashboard', { replace: true });
+  }, [isUnlocked, navigate]);
   const [mode, setMode] = useState<Mode>('login');
   const [name, setName] = useState('');
   const [email, setEmail] = useState(localStorage.getItem('kp_email') ?? '');

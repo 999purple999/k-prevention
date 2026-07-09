@@ -1,18 +1,60 @@
+<div align="center">
+
+<img src="public/favicon.svg" width="76" alt="k-prevention" />
+
 # k-prevention
 
-**Simulatore Monte Carlo del flusso di cassa per liberi professionisti italiani — cifrato end-to-end, deploy su Google Cloud Run.**
+### Simulatore Monte Carlo del flusso di cassa per liberi professionisti italiani<br/>— cifrato end-to-end, deploy su Google Cloud Run.
 
-Una proiezione finanziaria non è una linea: è un fascio di traiettorie. k-prevention simula migliaia di
-futuri della tua liquidità — con ritardi di pagamento, mesi di scarso focus, imprevisti a coda pesante e le
-scadenze fiscali italiane nei mesi giusti — e risponde all'unica domanda che conta: **qual è la probabilità di
-restare a secco?**
+[![CI](https://github.com/OWNER/k-prevention/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/k-prevention/actions/workflows/ci.yml)
+[![Deploy demo to GitHub Pages](https://github.com/OWNER/k-prevention/actions/workflows/pages.yml/badge.svg)](https://github.com/OWNER/k-prevention/actions/workflows/pages.yml)
+[![Demo dal vivo](https://img.shields.io/badge/%F0%9F%9A%80%20demo-dal%20vivo-22cee9)](https://OWNER.github.io/k-prevention/)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
+![React](https://img.shields.io/badge/React_18-20232A?logo=react&logoColor=61DAFB)
+![Vite](https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white)
+![Tailwind](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white)
+![Recharts](https://img.shields.io/badge/Recharts-FF6384?logo=chartdotjs&logoColor=white)
+![Node](https://img.shields.io/badge/Node_%E2%89%A5_22-339933?logo=nodedotjs&logoColor=white)
+![Google Cloud Run](https://img.shields.io/badge/Cloud_Run-4285F4?logo=googlecloud&logoColor=white)
+
+**[▶ Prova la demo dal vivo](https://OWNER.github.io/k-prevention/)** &nbsp;·&nbsp; funziona anche da telefono, nessun account necessario.
+
+</div>
+
+---
+
+> Una proiezione finanziaria non è una linea: è un **fascio di traiettorie**. k-prevention simula migliaia di
+> futuri della tua liquidità — con ritardi di pagamento, mesi di scarso focus, imprevisti a coda pesante e le
+> scadenze fiscali italiane nei mesi giusti — e risponde all'unica domanda che conta: **qual è la probabilità di
+> restare a secco?**
 
 Il server è un **passacarte cieco**: vede solo blob cifrati. Ogni calcolo avviene nel tuo browser, dopo aver
 decifrato i dati con una chiave derivata dalla tua password.
 
+> 🔎 **`OWNER`** nei link va sostituito con il tuo utente GitHub (lo faccio automaticamente alla creazione del repo).
+
 ---
 
+## 📱 Demo dal vivo e uso da telefono
+
+Ci sono **due modi** di provare k-prevention, entrambi accessibili da qualsiasi dispositivo (desktop, tablet, telefono):
+
+| | Demo statica (GitHub Pages) | App completa (Google Cloud Run) |
+|---|---|---|
+| **URL** | `https://OWNER.github.io/k-prevention/` | `https://k-prevention-…run.app` (dopo il deploy) |
+| **Login** | nessuno — entri subito con i dati d'esempio | account reale (email + password) |
+| **Backend** | nessuno: tutto nel browser | server Node su Cloud Run |
+| **Cifratura** | non necessaria (dati d'esempio) | end-to-end (il server è cieco) |
+| **Persistenza** | `localStorage` del browser | Firestore |
+| **A cosa serve** | mostrare l'app in 2 secondi, anche dal telefono | uso reale con i tuoi dati privati |
+
+La demo è **responsive** e pensata anche per lo schermo del telefono. La build statica è prodotta da
+`npm run build:demo` e pubblicata automaticamente su GitHub Pages dal workflow `.github/workflows/pages.yml`.
+
 ## Indice
+- [Demo dal vivo e uso da telefono](#-demo-dal-vivo-e-uso-da-telefono)
 - [Funzionalità](#funzionalità)
 - [Architettura](#architettura)
 - [Avvio rapido (locale)](#avvio-rapido-locale)

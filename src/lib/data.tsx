@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { api } from './api.ts';
 import { useSession } from './session.tsx';
+import { DEMO, loadDemoData, saveDemoData } from './demo.ts';
 import type {
   IncomeStream,
   Expense,
@@ -60,7 +61,7 @@ export function defaultUserData(name = 'Nuovo utente'): UserData {
       _unverified: [],
     },
     simulationConfig: { initialCapital: 10000, startDate: '2026-01-01', simulationHorizons: [12, 24, 36], ruinThresholdEUR: 1000, liquidityWarningMonths: 3 },
-    monteCarlo: { iterations: 2000, seed: 20260101, percentiles: [5, 10, 25, 50, 75, 90, 95], convergenceCheck: { enabled: true, tolerance: 0.01 }, antitheticVariates: true },
+    monteCarlo: { iterations: 10000, seed: 20260101, percentiles: [5, 10, 25, 50, 75, 90, 95], convergenceCheck: { enabled: true, tolerance: 0.01 }, antitheticVariates: true },
   };
 }
 
@@ -86,6 +87,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const reload = useCallback(async () => {
     if (!isUnlocked) return;
+    if (DEMO) {
+      setData(loadDemoData());
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -123,7 +128,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const save = useCallback(
     async <K extends DataType>(type: K, value: UserData[K]) => {
       // Aggiorna subito lo stato locale; ripersiste (cifrando) con debounce per tipo.
-      setData((d) => (d ? { ...d, [type]: value } : d));
+      setData((d) => {
+        const next = d ? { ...d, [type]: value } : d;
+        if (DEMO && next) saveDemoData(next);
+        return next;
+      });
+      if (DEMO) return; // in demo si persiste solo in localStorage
       if (timers.current[type]) clearTimeout(timers.current[type]);
       timers.current[type] = setTimeout(async () => {
         setSavingType(type);

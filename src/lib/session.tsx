@@ -16,6 +16,7 @@ import {
   aadFor,
 } from './crypto.ts';
 import { api } from './api.ts';
+import { DEMO } from './demo.ts';
 
 interface SessionState {
   userId: string | null;
@@ -37,11 +38,11 @@ const Ctx = createContext<SessionContextValue | null>(null);
 const EMAIL_KEY = 'kp_email';
 
 export function SessionProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<SessionState>({
-    userId: null,
-    email: localStorage.getItem(EMAIL_KEY),
-    dek: null,
-  });
+  const [state, setState] = useState<SessionState>(
+    DEMO
+      ? { userId: 'demo-user', email: 'francesco.pernice@k-prevention.app', dek: null }
+      : { userId: null, email: localStorage.getItem(EMAIL_KEY), dek: null },
+  );
 
   const login = useCallback(async (email: string, password: string) => {
     const { authSalt, kekSalt } = await api.salts(email);
@@ -121,7 +122,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const value: SessionContextValue = {
     ...state,
-    isUnlocked: !!state.dek,
+    isUnlocked: DEMO || !!state.dek,
     login,
     register,
     logout,
