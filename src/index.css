@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---- Design tokens ------------------------------------------------------ */
+:root {
+  --bg: 8 11 20; /* ink-950 */
+  --bg-soft: 14 18 32; /* ink-900 */
+  --panel: 18 23 40;
+  --panel-2: 24 30 52;
+  --border: 255 255 255 / 0.08;
+  --border-strong: 255 255 255 / 0.14;
+  --text: 236 238 242;
+  --text-dim: 148 163 184;
+  --accent: 34 206 233;
+  --grid: 255 255 255 / 0.06;
+  color-scheme: dark;
+}
+
+:root.light {
+  --bg: 247 248 250;
+  --bg-soft: 255 255 255;
+  --panel: 255 255 255;
+  --panel-2: 248 250 252;
+  --border: 15 23 42 / 0.10;
+  --border-strong: 15 23 42 / 0.16;
+  --text: 17 24 39;
+  --text-dim: 71 85 105;
+  --accent: 8 140 173;
+  --grid: 15 23 42 / 0.07;
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 700px at 78% -10%, rgb(var(--accent) / 0.10), transparent 55%),
+    radial-gradient(900px 600px at 8% 8%, rgb(99 102 241 / 0.06), transparent 50%),
+    rgb(var(--bg));
+  color: rgb(var(--text));
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Tabular figures for every monetary number. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* ---- Component primitives ---------------------------------------------- */
+@layer components {
+  .panel {
+    @apply rounded-2xl border backdrop-blur-sm;
+    background: linear-gradient(180deg, rgb(var(--panel) / 0.9), rgb(var(--panel-2) / 0.85));
+    border-color: rgb(var(--border));
+    box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.03) inset, 0 18px 40px -24px rgb(0 0 0 / 0.6);
+  }
+  .panel-flat {
+    @apply rounded-xl border;
+    background: rgb(var(--panel) / 0.6);
+    border-color: rgb(var(--border));
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all duration-150 select-none disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-primary {
+    @apply btn text-ink-950;
+    background: linear-gradient(180deg, rgb(var(--accent)), rgb(var(--accent) / 0.82));
+    box-shadow: 0 6px 20px -8px rgb(var(--accent) / 0.6);
+  }
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.07);
+  }
+  .btn-ghost {
+    @apply btn border;
+    border-color: rgb(var(--border-strong));
+    color: rgb(var(--text));
+    background: rgb(var(--panel) / 0.5);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: rgb(var(--panel-2) / 0.9);
+  }
+  .btn-danger {
+    @apply btn;
+    color: #fecaca;
+    background: rgb(239 68 68 / 0.14);
+    border: 1px solid rgb(239 68 68 / 0.3);
+  }
+
+  .field {
+    @apply w-full rounded-lg border px-3 py-2 text-sm outline-none transition;
+    background: rgb(var(--bg) / 0.5);
+    border-color: rgb(var(--border-strong));
+    color: rgb(var(--text));
+  }
+  .field:focus {
+    border-color: rgb(var(--accent) / 0.7);
+    box-shadow: 0 0 0 3px rgb(var(--accent) / 0.15);
+  }
+  .field-warn {
+    border-color: rgb(245 158 11 / 0.6);
+    box-shadow: 0 0 0 3px rgb(245 158 11 / 0.12);
+  }
+
+  .label {
+    @apply block text-xs font-medium uppercase tracking-wide;
+    color: rgb(var(--text-dim));
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium;
+    background: rgb(var(--panel-2) / 0.9);
+    border: 1px solid rgb(var(--border));
+    color: rgb(var(--text-dim));
+  }
+
+  .divider {
+    height: 1px;
+    background: rgb(var(--border));
+  }
+}
+
+/* Slider styling (range inputs) */
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(var(--accent) / 0.25);
+  outline: none;
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: rgb(var(--accent));
+  cursor: pointer;
+  box-shadow: 0 0 0 4px rgb(var(--accent) / 0.18);
+}
+input[type='range']::-moz-range-thumb {
+  height: 16px;
+  width: 16px;
+  border: none;
+  border-radius: 50%;
+  background: rgb(var(--accent));
+  cursor: pointer;
+}
+
+/* Scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--text-dim) / 0.3) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(var(--text-dim) / 0.25);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin {
+  animation: spin 0.8s linear infinite;
+}

@@ -1,0 +1,30 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+
+# local database (SQLite backend) — never commit user data
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+# secrets / local env
+.env
+.env.local
+*.key.json
+service-account*.json
+
+# generated credentials output
+FRANCESCO_CREDENTIALS.txt
+
+# logs & OS cruft
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/
+.idea/

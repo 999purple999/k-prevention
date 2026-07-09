@@ -1,0 +1,22 @@
+# File esclusi dall'upload a Cloud Build (il build ricostruisce dist e installa i moduli).
+.git
+.github
+node_modules
+dist
+.env
+.env.local
+*.key.json
+service-account*.json
+FRANCESCO_CREDENTIALS.txt
+data/*.db
+data/*.db-*
+# I dati di ricerca e i prompt non servono al runtime:
+research
+prompts
+prompt1out
+prompt2out
+.vscode
+.idea
+npm-debug.log*
+# NB: i JSON in data/ (schema.json, francesco_dataset.json, gear_final.json) NON sono esclusi:
+# servono al seed e al Dockerfile.

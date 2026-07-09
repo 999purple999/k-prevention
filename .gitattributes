@@ -1,0 +1,6 @@
+# Normalizza i fine-riga a LF nel repository (evita rumore CRLF su Windows).
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.svg text eol=lf
