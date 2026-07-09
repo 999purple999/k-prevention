@@ -75,6 +75,30 @@ mantenuto — è cambiato solo il substrato di hosting.
 - Spese: base (affitto, utenze, alimentari, software) + **setup studio riconciliato da Gemini+Perplexity** (`gear_final.json`): 16 voci verificate, 4 disabilitate (Apollo/U87 come alternative, Stedman/Serum come "prezzo da verificare").
 - Fiscale: forfettario con valori 2025 come ultimo dato noto (banner "da confermare").
 
+## Review adversariale + hardening
+
+Passata una review multi-agente (5 dimensioni: motore, crypto/sicurezza, stato React,
+server/store, build/deploy) con verifica adversariale di ogni finding. Bug reali corretti
+e verificati:
+
+- **Deploy (critico):** il seed locale usava un `SERVER_SECRET` diverso da quello di Cloud
+  Run → login di produzione rotto; e richiedeva ADC non documentate. Risolto: il seed
+  avviene DENTRO Cloud Run all'avvio (`SEED_ON_START`), stesso processo/segreto, ADC del
+  service account, idempotente. Verificato: server con DB vuoto → "seed: creato" → login+decrypt OK.
+- **Motore (subdolo):** l'antithetic (1-u) su Box-Muller non negava il normale (gemelli con
+  corr +0,58 → varianza AUMENTATA, convergenza falsata). Risolto con quantile inversa (Acklam):
+  corr = -1 esatta, convergenza conservativa. Verificato empiricamente.
+- **Server:** wrapper async su tutti gli handler (Express 4 non inoltra le promise rifiutate)
+  + error middleware; rate limiter su `req.ip` (trust proxy) invece del token X-Forwarded-For
+  grezzo; import dinamico del backend store (niente node:sqlite in modalità firestore).
+- **Client:** `useSimulation` con un solo listener instradato per `runId` (niente memory leak
+  né risultati obsoleti); flush dei salvataggi in sospeso su visibilitychange/beforeunload.
+- **Runtime:** Node 24 in Dockerfile e CI; `crypto.ts` copiato nell'immagine runtime.
+
+Findings scartati dopo verifica: enumerazione su /register (tradeoff intrinseco, già
+rate-limited), JWT senza revoca server-side (accettabile per l'app), differenza tecnica
+sqlite/firestore su `scanForPlaintext` (metodo solo-test).
+
 ## Cosa resta (deploy)
 - `git init` + repository GitHub: richiede autenticazione GitHub (token/`gh auth login`).
 - Deploy su Cloud Run: richiede `gcloud auth login` + progetto GCP con billing. Comandi pronti in `README.md` e `deploy.ps1`.
