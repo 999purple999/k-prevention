@@ -8,6 +8,7 @@ export const DATA_TYPES = [
   'simulationConfig',
   'monteCarlo',
   'profile',
+  'ledger', // consuntivo: saldo reale + attuali per mese (rolling forecast)
 ];
 
 export const isValidDataType = (t) => DATA_TYPES.includes(t);

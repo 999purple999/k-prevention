@@ -1,17 +1,24 @@
-/** Rotte dati: passacarte per blob opachi. Il Worker/serve NON fa mai JSON.parse del
- *  contenuto, non valida, non logga i blob. Valida solo che :type sia in allowlist. */
+/** Rotte dati: passacarte per blob opachi. Il server NON fa mai JSON.parse del contenuto.
+ *  Concorrenza ottimistica (baseVersion → 409) e notifiche di sync (solo metadati). */
 import { Router } from 'express';
 import { requireAuth, ah } from '../lib/http.js';
 import { isValidDataType } from '../lib/constants.js';
 import { newId } from '../lib/serverCrypto.js';
+import { publish } from '../lib/pubsub.js';
 
 export function dataRouter(store) {
   const r = Router();
   r.use(requireAuth());
 
-  // GET /api/data — bootstrap: tutti i blob dell'utente in un colpo (metadati + cifrato).
+  // GET /api/data — bootstrap: tutti i blob dell'utente in un colpo.
   r.get('/data', ah(async (req, res) => {
     res.json(await store.getAllData(req.userId));
+  }));
+
+  // GET /api/data/versions — solo {dataType, lastModified} (polling di sincronizzazione).
+  // Deve precedere /data/:type.
+  r.get('/data/versions', ah(async (req, res) => {
+    res.json(await store.getDataVersions(req.userId));
   }));
 
   // GET /api/data/:type
@@ -22,15 +29,24 @@ export function dataRouter(store) {
     res.json(row);
   }));
 
-  // PUT /api/data/:type  body { encryptedBlob, iv }
+  // PUT /api/data/:type  body { encryptedBlob, iv, baseVersion? }
   r.put('/data/:type', ah(async (req, res) => {
-    if (!isValidDataType(req.params.type)) return res.status(400).json({ error: 'tipo non valido' });
-    const { encryptedBlob, iv } = req.body || {};
+    const type = req.params.type;
+    if (!isValidDataType(type)) return res.status(400).json({ error: 'tipo non valido' });
+    const { encryptedBlob, iv, baseVersion } = req.body || {};
     if (typeof encryptedBlob !== 'string' || typeof iv !== 'string') {
       return res.status(400).json({ error: 'payload non valido' });
     }
+    // Concorrenza ottimistica: se il client ha una versione più vecchia della corrente, 409.
+    if (baseVersion != null) {
+      const current = await store.getData(req.userId, type);
+      if (current && current.lastModified > baseVersion) {
+        return res.status(409).json({ error: 'conflitto', current });
+      }
+    }
     const ts = Date.now();
-    await store.putData(req.userId, req.params.type, newId(), encryptedBlob, iv, ts);
+    await store.putData(req.userId, type, newId(), encryptedBlob, iv, ts);
+    publish(req.userId, { type, lastModified: ts });
     res.json({ ok: true, lastModified: ts });
   }));
 
@@ -38,31 +54,64 @@ export function dataRouter(store) {
   r.delete('/data/:type', ah(async (req, res) => {
     if (!isValidDataType(req.params.type)) return res.status(400).json({ error: 'tipo non valido' });
     await store.deleteData(req.userId, req.params.type);
+    publish(req.userId, { type: req.params.type, lastModified: Date.now(), deleted: true });
     res.json({ ok: true });
   }));
 
-  // POST /api/simulations  body { name, encryptedBlob, iv }
+  // ---- Scenari (simulazioni salvate, stile Git) ----
+
+  // POST /api/simulations  body { name, encryptedBlob, iv, parentId?, isMain? }
   r.post('/simulations', ah(async (req, res) => {
-    const { name, encryptedBlob, iv } = req.body || {};
+    const { name, encryptedBlob, iv, parentId, isMain } = req.body || {};
     if (typeof name !== 'string' || typeof encryptedBlob !== 'string' || typeof iv !== 'string') {
       return res.status(400).json({ error: 'payload non valido' });
     }
     const id = newId();
-    const created_at = Date.now();
-    await store.createSimulation(req.userId, { id, name, created_at, encrypted_blob: encryptedBlob, iv });
-    res.status(201).json({ id, createdAt: created_at });
+    const now = Date.now();
+    await store.createSimulation(req.userId, {
+      id, name, created_at: now, updated_at: now, parent_id: parentId ?? null, is_main: !!isMain, encrypted_blob: encryptedBlob, iv,
+    });
+    publish(req.userId, { type: 'simulations', lastModified: now });
+    res.status(201).json({ id, createdAt: now });
   }));
 
-  // GET /api/simulations — solo metadati (il nome NON è cifrato: avvisare in UI).
+  // GET /api/simulations — metadati estesi.
   r.get('/simulations', ah(async (req, res) => {
     res.json(await store.listSimulations(req.userId));
   }));
 
-  // GET /api/simulations/:id — il blob cifrato di una simulazione salvata.
+  // GET /api/simulations/:id — blob cifrato.
   r.get('/simulations/:id', ah(async (req, res) => {
     const sim = await store.getSimulation(req.userId, req.params.id);
     if (!sim) return res.status(404).json({ error: 'non trovata' });
     res.json(sim);
+  }));
+
+  // PUT /api/simulations/:id  body { name?, encryptedBlob?, iv? }
+  r.put('/simulations/:id', ah(async (req, res) => {
+    const { name, encryptedBlob, iv } = req.body || {};
+    const now = Date.now();
+    const ok = await store.updateSimulation(req.userId, req.params.id, {
+      name, encrypted_blob: encryptedBlob, iv, updated_at: now,
+    });
+    if (!ok) return res.status(404).json({ error: 'non trovata' });
+    publish(req.userId, { type: 'simulations', lastModified: now });
+    res.json({ ok: true, updatedAt: now });
+  }));
+
+  // DELETE /api/simulations/:id
+  r.delete('/simulations/:id', ah(async (req, res) => {
+    await store.deleteSimulation(req.userId, req.params.id);
+    publish(req.userId, { type: 'simulations', lastModified: Date.now() });
+    res.json({ ok: true });
+  }));
+
+  // POST /api/simulations/:id/promote — imposta lo scenario come principale.
+  r.post('/simulations/:id/promote', ah(async (req, res) => {
+    const ok = await store.promoteSimulation(req.userId, req.params.id, Date.now());
+    if (!ok) return res.status(404).json({ error: 'non trovata' });
+    publish(req.userId, { type: 'simulations', lastModified: Date.now() });
+    res.json({ ok: true });
   }));
 
   return r;

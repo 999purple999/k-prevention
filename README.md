@@ -4,7 +4,7 @@
 
 # k-prevention
 
-### Simulatore Monte Carlo del flusso di cassa per liberi professionisti italiani<br/>— cifrato end-to-end, deploy su Google Cloud Run.
+### Il copilota di liquidità per liberi professionisti — simulatore Monte Carlo<br/>cifrato end-to-end, d'uso quotidiano, con ponte AI. Su Google Cloud Run.
 
 [![CI](https://github.com/OWNER/k-prevention/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/k-prevention/actions/workflows/ci.yml)
 [![Deploy demo to GitHub Pages](https://github.com/OWNER/k-prevention/actions/workflows/pages.yml/badge.svg)](https://github.com/OWNER/k-prevention/actions/workflows/pages.yml)
@@ -56,6 +56,8 @@ La demo è **responsive** e pensata anche per lo schermo del telefono. La build 
 ## Indice
 - [Demo dal vivo e uso da telefono](#-demo-dal-vivo-e-uso-da-telefono)
 - [Funzionalità](#funzionalità)
+- [Copilota quotidiano (v2)](#copilota-quotidiano-v2)
+- [Ponte AI: CLI + MCP](#ponte-ai-cli--server-mcp)
 - [Architettura](#architettura)
 - [Avvio rapido (locale)](#avvio-rapido-locale)
 - [Variabili d'ambiente e secret](#variabili-dambiente-e-secret)
@@ -89,6 +91,66 @@ La demo è **responsive** e pensata anche per lo schermo del telefono. La build 
 - **Reattività** — anteprima a 200 iterazioni mentre modifichi, simulazione completa on-demand, tutto in un
   Web Worker (la UI non si blocca).
 - **Multi-dispositivo** — SPA responsive, tema chiaro/scuro automatico, numeri in formato **it-IT**.
+
+## Copilota quotidiano (v2)
+
+k-prevention non è solo un simulatore: è lo strumento che porti in tasca ogni giorno.
+
+- **Consuntivo & rolling forecast** — registri il **saldo reale** e, mese per mese, cosa hai
+  speso/incassato davvero (es. *"utenze 50€ invece di 300 perché ha pagato mamma"*). La
+  proiezione si **ri-àncora al presente**: da oggi in avanti simula il futuro partendo dal tuo
+  saldo effettivo. La vista **Piano vs Reale** ti dice se sei in linea.
+- **Scenari stile Git** — salva lo stato come **ramo**, confronta due scenari fianco a fianco
+  (rovina, capitale, autonomia), **promuovi** il migliore a principale, importa/esporta tutto.
+- **App installabile (PWA)** — apri il sito sul telefono e **«Aggiungi a Home»**: funziona a
+  schermo intero e **offline** (le modifiche partono alla riconnessione). UI mobile con
+  bottom-tab (Rischio · Registra · Scenari · Modifica), semplice ma completa.
+- **Sincronizzazione maniacale** — cifrata end-to-end, in tempo reale tra i tuoi dispositivi
+  (SSE + polling di fallback), con concorrenza ottimistica e **merge a 3 vie** dei conflitti,
+  e coda offline. Modifichi sul portatile → il telefono si aggiorna in un secondo.
+- **Ponte AI (CLI + MCP)** — un LLM (io compreso) può collegarsi **con la tua chiave, in
+  locale**, leggere i dati **decifrati** e costruire/ottimizzare scenari, spiegandoli. L'E2E
+  resta intatto: la chiave non lascia il dispositivo. Vedi [Ponte AI](#ponte-ai-cli--mcp).
+
+## Ponte AI: CLI `kprev` + server MCP
+
+Il server è cieco, quindi un'AI accede ai dati **decifrati** solo tramite un ponte locale che
+tiene la chiave sul tuo dispositivo. È l'approccio più sicuro (niente chiaro nel cloud).
+
+```bash
+# imposta l'endpoint e le credenziali (o verranno chieste)
+export KPREV_BASE="https://k-prevention-….run.app"   # o http://localhost:8080
+export KPREV_EMAIL="francesco.pernice@k-prevention.app"
+export KPREV_PASSWORD="…"
+
+node cli/kprev.js login                       # autentica; sessione in ~/.kprev/
+node cli/kprev.js pull                         # TUTTI i dati decifrati (JSON)
+node cli/kprev.js pull expenses                # solo un tipo
+node cli/kprev.js simulate                     # esegue la simulazione → sintesi
+node cli/kprev.js optimize --goal "ruin<0.1"   # cerca lo scenario che centra l'obiettivo…
+node cli/kprev.js optimize --goal "capital@36>25000" --save   # …e salva il migliore
+node cli/kprev.js sims list|create <nome>|promote <id>|export --all
+```
+
+`optimize` prova diverse **leve** (taglia spese discrezionali, rinvia lo studio, più turni da
+barista, solo lo studio essenziale…), classifica gli scenari per l'obiettivo e **spiega** perché
+il migliore funziona (es. *"studio essenziale + niente spese superflue → rovina dal 39% all'1%"*).
+
+**MCP (Claude Desktop o altri client)** — esponi gli stessi strumenti a un LLM. In
+`claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "kprev": {
+      "command": "node",
+      "args": ["/PERCORSO/ASSOLUTO/mcp/kprev-mcp.js"],
+      "env": { "KPREV_BASE": "https://…run.app", "KPREV_EMAIL": "…", "KPREV_PASSWORD": "…" }
+    }
+  }
+}
+```
+Strumenti: `kprev_pull`, `kprev_simulate`, `kprev_optimize`, `kprev_list_scenarios`,
+`kprev_get_scenario`, `kprev_create_scenario`, `kprev_promote_scenario`.
 
 ## Architettura
 
@@ -164,7 +226,7 @@ FRANCESCO_PASSWORD="la-tua-password" npm run seed
 ## Test
 
 ```bash
-npm test        # 17 test: crittografia, blindness del server, e i 10 test del motore
+npm test        # 24 test: crittografia, blindness del server, motore, merge di sync, rolling forecast
 npm run typecheck
 ```
 

@@ -76,25 +76,61 @@ export async function createFirestoreStore() {
         return { dataType: d.id, encryptedBlob: v.encrypted_blob, iv: v.iv, lastModified: v.last_modified };
       });
     },
+    async getDataVersions(userId) {
+      const snap = await users.doc(userId).collection('data').get();
+      return snap.docs.map((d) => ({ dataType: d.id, lastModified: d.data().last_modified }));
+    },
 
     async createSimulation(userId, s) {
       await users.doc(userId).collection('simulations').doc(s.id).set({
         id: s.id,
         name: s.name,
         created_at: s.created_at,
+        updated_at: s.updated_at ?? s.created_at,
+        parent_id: s.parent_id ?? null,
+        is_main: !!s.is_main,
         encrypted_blob: s.encrypted_blob,
         iv: s.iv,
       });
     },
     async listSimulations(userId) {
-      const snap = await users.doc(userId).collection('simulations').orderBy('created_at', 'desc').get();
-      return snap.docs.map((d) => ({ id: d.data().id, name: d.data().name, createdAt: d.data().created_at }));
+      const snap = await users.doc(userId).collection('simulations').get();
+      return snap.docs
+        .map((d) => {
+          const v = d.data();
+          return { id: v.id, name: v.name, createdAt: v.created_at, updatedAt: v.updated_at ?? v.created_at, parentId: v.parent_id ?? null, isMain: !!v.is_main };
+        })
+        .sort((a, b) => Number(b.isMain) - Number(a.isMain) || b.updatedAt - a.updatedAt);
     },
     async getSimulation(userId, id) {
       const snap = await users.doc(userId).collection('simulations').doc(id).get();
       if (!snap.exists) return null;
       const d = snap.data();
-      return { id: d.id, name: d.name, createdAt: d.created_at, encryptedBlob: d.encrypted_blob, iv: d.iv };
+      return { id: d.id, name: d.name, createdAt: d.created_at, updatedAt: d.updated_at ?? d.created_at, parentId: d.parent_id ?? null, isMain: !!d.is_main, encryptedBlob: d.encrypted_blob, iv: d.iv };
+    },
+    async updateSimulation(userId, id, patch) {
+      const ref = users.doc(userId).collection('simulations').doc(id);
+      const snap = await ref.get();
+      if (!snap.exists) return false;
+      const upd = { updated_at: patch.updated_at };
+      if (patch.name != null) upd.name = patch.name;
+      if (patch.encrypted_blob != null) { upd.encrypted_blob = patch.encrypted_blob; upd.iv = patch.iv; }
+      await ref.set(upd, { merge: true });
+      return true;
+    },
+    async deleteSimulation(userId, id) {
+      await users.doc(userId).collection('simulations').doc(id).delete();
+    },
+    async promoteSimulation(userId, id, ts) {
+      const col = users.doc(userId).collection('simulations');
+      const target = await col.doc(id).get();
+      if (!target.exists) return false;
+      const all = await col.where('is_main', '==', true).get();
+      const batch = db.batch();
+      all.docs.forEach((d) => batch.set(d.ref, { is_main: false }, { merge: true }));
+      batch.set(col.doc(id), { is_main: true, updated_at: ts }, { merge: true });
+      await batch.commit();
+      return true;
     },
 
     async scanForPlaintext() {

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { authRouter } from './routes/auth.js';
 import { dataRouter } from './routes/data.js';
+import { syncRouter } from './routes/sync.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DIST = join(__dirname, '..', 'dist');
@@ -18,6 +19,7 @@ export function createApp(store, { serveSpa = true } = {}) {
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, backend: store.backend }));
   app.use('/api/auth', authRouter(store));
+  app.use('/api', syncRouter());
   app.use('/api', dataRouter(store));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'endpoint non trovato' }));
 

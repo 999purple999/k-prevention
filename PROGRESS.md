@@ -99,6 +99,29 @@ Findings scartati dopo verifica: enumerazione su /register (tradeoff intrinseco,
 rate-limited), JWT senza revoca server-side (accettabile per l'app), differenza tecnica
 sqlite/firestore su `scanForPlaintext` (metodo solo-test).
 
+## v2 — Copilota quotidiano
+
+Estensione della v1 in strumento d'uso quotidiano (tutto testato/verificato):
+
+- **Consuntivo & rolling forecast** — nuovo blob `ledger` (saldo reale + attuali per mese +
+  transazioni). Il motore si ri-àncora al presente via `anchorInput` (nessuna modifica invasiva
+  al motore). UI: `QuickLog`, `PlanVsActual`, pagina `Registra`. Verificato: transazione dal
+  browser → letta decifrata dal CLI (round-trip E2E cross-device).
+- **Scenari stile Git** — `simulations` esteso (`parent_id`, `updated_at`, `is_main`) + endpoint
+  PUT/DELETE/promote. Pagina `Scenari`: salva ramo, confronta, promuovi, import/export.
+  Verificato: scenari creati dal CLI compaiono nel browser.
+- **PWA** — `vite-plugin-pwa` (manifest + service worker, offline), icone da `favicon.svg`,
+  install prompt, layout mobile con bottom-tab. La PWA è attiva solo nella build di produzione.
+- **Sync maniacale** — concorrenza ottimistica (`baseVersion` → 409 + merge a 3 vie), push SSE
+  (`/api/sync/stream`, solo metadati), polling di fallback (`/api/data/versions`), coda offline.
+  Verificato: modifica su un client → visibile sull'altro; merge testato (7 test in `sync.test.ts`).
+- **Ponte AI** — CLI `cli/kprev.js` (login/pull/push/sims/simulate/optimize) + server MCP
+  `mcp/kprev-mcp.js`. La chiave resta locale (E2E intatto). `optimize` cerca lo scenario che
+  centra un obiettivo e lo spiega. Verificato da questa chat: rovina 39%→1% con la leva giusta.
+
+Test totali: **24 verdi**. Nuove dipendenze: `vite-plugin-pwa`, `sharp` (dev, gen icone),
+`@modelcontextprotocol/sdk` (dev). Nuovo tipo dato `ledger` in allowlist.
+
 ## Cosa resta (deploy)
 - `git init` + repository GitHub: richiede autenticazione GitHub (token/`gh auth login`).
 - Deploy su Cloud Run: richiede `gcloud auth login` + progetto GCP con billing. Comandi pronti in `README.md` e `deploy.ps1`.

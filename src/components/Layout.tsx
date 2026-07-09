@@ -3,17 +3,21 @@ import { type ReactNode } from 'react';
 import { useSession } from '../lib/session.tsx';
 import { useData } from '../lib/data.tsx';
 import { Logo, ThemeToggle, EncryptionBadge } from './ui.tsx';
+import { SyncBadge } from './SyncBadge.tsx';
+import { InstallPrompt } from './InstallPrompt.tsx';
 import { DEMO } from '../lib/demo.ts';
 
 const nav = [
   { to: '/dashboard', label: 'Dashboard' },
+  { to: '/registra', label: 'Registra' },
+  { to: '/scenari', label: 'Scenari' },
   { to: '/import', label: 'Importa' },
   { to: '/settings', label: 'Impostazioni' },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
   const { logout } = useSession();
-  const { data, savingType } = useData();
+  const { data } = useData();
   const navigate = useNavigate();
   const name = data?.profile?.name ?? 'Utente';
   const initials = name.split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase();
@@ -43,14 +47,10 @@ export function Layout({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="ml-auto flex items-center gap-2.5">
-            <span className="hidden sm:block">
+            <span className="hidden lg:block">
               <EncryptionBadge />
             </span>
-            {savingType && (
-              <span className="chip animate-fade-in" title="Salvataggio cifrato in corso">
-                salvataggio…
-              </span>
-            )}
+            <SyncBadge />
             <ThemeToggle />
             <div className="flex items-center gap-2 rounded-full py-1 pl-1 pr-3" style={{ background: 'rgb(var(--panel-2))', border: '1px solid rgb(var(--border))' }}>
               <div className="flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold text-ink-950" style={{ background: 'linear-gradient(180deg,rgb(var(--accent)),rgb(var(--accent)/.8))' }}>
@@ -91,6 +91,8 @@ export function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
       )}
+      <InstallPrompt />
+
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">{children}</main>
 
       <footer className="mx-auto max-w-7xl px-4 pb-10 pt-4 sm:px-6">

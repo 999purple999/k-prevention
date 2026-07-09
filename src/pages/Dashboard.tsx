@@ -4,6 +4,7 @@ import { useData } from '../lib/data.tsx';
 import { useSimulation } from '../hooks/useSimulation.ts';
 import { validateTaxModel } from '../engine/tax.ts';
 import { RiskPanel } from '../components/RiskPanel.tsx';
+import { PlanVsActual } from '../components/PlanVsActual.tsx';
 import { FanChart } from '../components/charts/FanChart.tsx';
 import { CashflowBars } from '../components/charts/CashflowBars.tsx';
 import { Histogram } from '../components/charts/Histogram.tsx';
@@ -76,6 +77,8 @@ export function Dashboard() {
 
   const incomeSum = data?.incomeStreams.filter((s) => s.enabled !== false).length ?? 0;
   const expenseSum = data?.expenses.filter((e) => e.enabled !== false).length ?? 0;
+  const realCapital = data?.ledger?.currentCapital ?? null;
+  const asOfMonth = data?.ledger?.asOfMonth ?? null;
 
   return (
     <div className="space-y-6">
@@ -84,10 +87,16 @@ export function Dashboard() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Ciao, {data?.profile?.name?.split(' ')[0] ?? 'utente'}.</h1>
           <p className="mt-0.5 text-sm" style={{ color: 'rgb(var(--text-dim))' }}>
-            {incomeSum} fonti di reddito · {expenseSum} spese attive · capitale iniziale {fmtEUR(data?.simulationConfig.initialCapital ?? 0)}
+            {incomeSum} fonti di reddito · {expenseSum} spese attive ·{' '}
+            {realCapital != null ? (
+              <>saldo reale <span className="font-semibold" style={{ color: 'rgb(var(--text))' }}>{fmtEUR(realCapital)}</span></>
+            ) : (
+              <>capitale iniziale {fmtEUR(data?.simulationConfig.initialCapital ?? 0)}</>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Link to="/registra" className="btn-ghost">Registra</Link>
           <div className="inline-flex overflow-hidden rounded-lg" style={{ border: '1px solid rgb(var(--border-strong))' }}>
             {horizons.map((h) => (
               <button key={h} onClick={() => setHorizon(h)} className="px-3 py-1.5 text-sm font-medium transition"
@@ -115,6 +124,8 @@ export function Dashboard() {
       ) : out ? (
         <>
           <RiskPanel output={out} horizon={horizon} preview={preview} />
+
+          {asOfMonth && <PlanVsActual month={asOfMonth} />}
 
           {sim.running && preview && (
             <div className="h-1 overflow-hidden rounded-full" style={{ background: 'rgb(var(--border))' }}>

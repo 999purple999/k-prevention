@@ -6,6 +6,7 @@
  */
 import dataset from '../../data/francesco_dataset.json';
 import type { UserData } from './data.tsx';
+import { emptyLedger } from './ledger.ts';
 
 export const DEMO: boolean = import.meta.env.VITE_DEMO === '1';
 
@@ -21,6 +22,7 @@ export function demoUserData(): UserData {
     taxModel: { ...(ds.taxModel as UserData['taxModel']), _unverified: (ds._unverified as never) ?? [] },
     simulationConfig: ds.simulationConfig as UserData['simulationConfig'],
     monteCarlo: ds.monteCarlo as UserData['monteCarlo'],
+    ledger: emptyLedger(),
   };
 }
 

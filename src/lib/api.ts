@@ -9,13 +9,14 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   });
   if (!res.ok) {
     let msg = `Errore ${res.status}`;
+    let payload: unknown;
     try {
-      const j = await res.json();
-      if (j?.error) msg = j.error;
+      payload = await res.json();
+      if ((payload as { error?: string })?.error) msg = (payload as { error: string }).error;
     } catch {
       /* ignore */
     }
-    throw new ApiError(msg, res.status);
+    throw new ApiError(msg, res.status, payload);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -23,9 +24,11 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  body: unknown;
+  constructor(message: string, status: number, body?: unknown) {
     super(message);
     this.status = status;
+    this.body = body;
   }
 }
 
@@ -50,6 +53,14 @@ export interface SimulationMeta {
   id: string;
   name: string;
   createdAt: number;
+  updatedAt: number;
+  parentId: string | null;
+  isMain: boolean;
+}
+
+export interface DataVersion {
+  dataType: string;
+  lastModified: number;
 }
 
 export const api = {
@@ -70,12 +81,18 @@ export const api = {
 
   getAllData: () => req<StoredBlobWithType[]>('GET', '/api/data'),
   getData: (type: string) => req<StoredBlob>('GET', `/api/data/${type}`),
-  putData: (type: string, encryptedBlob: string, iv: string) =>
-    req<{ ok: boolean; lastModified: number }>('PUT', `/api/data/${type}`, { encryptedBlob, iv }),
+  getVersions: () => req<DataVersion[]>('GET', '/api/data/versions'),
+  putData: (type: string, encryptedBlob: string, iv: string, baseVersion?: number) =>
+    req<{ ok: boolean; lastModified: number }>('PUT', `/api/data/${type}`, { encryptedBlob, iv, baseVersion }),
   deleteData: (type: string) => req<{ ok: boolean }>('DELETE', `/api/data/${type}`),
 
-  saveSimulation: (name: string, encryptedBlob: string, iv: string) =>
-    req<{ id: string; createdAt: number }>('POST', '/api/simulations', { name, encryptedBlob, iv }),
+  saveSimulation: (name: string, encryptedBlob: string, iv: string, parentId?: string | null, isMain?: boolean) =>
+    req<{ id: string; createdAt: number }>('POST', '/api/simulations', { name, encryptedBlob, iv, parentId, isMain }),
   listSimulations: () => req<SimulationMeta[]>('GET', '/api/simulations'),
-  getSimulation: (id: string) => req<StoredBlob & { id: string; name: string; createdAt: number }>('GET', `/api/simulations/${id}`),
+  getSimulation: (id: string) =>
+    req<StoredBlob & SimulationMeta>('GET', `/api/simulations/${id}`),
+  updateSimulation: (id: string, patch: { name?: string; encryptedBlob?: string; iv?: string }) =>
+    req<{ ok: boolean; updatedAt: number }>('PUT', `/api/simulations/${id}`, patch),
+  deleteSimulation: (id: string) => req<{ ok: boolean }>('DELETE', `/api/simulations/${id}`),
+  promoteSimulation: (id: string) => req<{ ok: boolean }>('POST', `/api/simulations/${id}/promote`),
 };

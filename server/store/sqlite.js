@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS simulations (
   user_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name           TEXT NOT NULL,
   created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL DEFAULT 0,
+  parent_id      TEXT,
+  is_main        INTEGER NOT NULL DEFAULT 0,
   encrypted_blob TEXT NOT NULL,
   iv             TEXT NOT NULL
 );
@@ -46,12 +49,24 @@ CREATE INDEX IF NOT EXISTS idx_user_data_user ON user_data(user_id);
 CREATE INDEX IF NOT EXISTS idx_simulations_user ON simulations(user_id);
 `;
 
+// Migrazioni idempotenti per DB creati con lo schema v1 (aggiunge le colonne scenario).
+function migrate(db) {
+  const cols = new Set(db.prepare("PRAGMA table_info('simulations')").all().map((c) => c.name));
+  const add = (name, def) => {
+    if (!cols.has(name)) db.exec(`ALTER TABLE simulations ADD COLUMN ${name} ${def}`);
+  };
+  add('updated_at', 'INTEGER NOT NULL DEFAULT 0');
+  add('parent_id', 'TEXT');
+  add('is_main', 'INTEGER NOT NULL DEFAULT 0');
+}
+
 export function createSqliteStore(path) {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA foreign_keys = ON;');
   db.exec(SCHEMA);
+  migrate(db);
 
   const stmts = {
     userByLookup: db.prepare('SELECT * FROM users WHERE email_lookup = ?'),
@@ -72,12 +87,34 @@ export function createSqliteStore(path) {
     deleteData: db.prepare('DELETE FROM user_data WHERE user_id = ? AND data_type = ?'),
     listDataTypes: db.prepare('SELECT data_type FROM user_data WHERE user_id = ?'),
     allData: db.prepare('SELECT data_type, encrypted_blob, iv, last_modified FROM user_data WHERE user_id = ?'),
+    versions: db.prepare('SELECT data_type, last_modified FROM user_data WHERE user_id = ?'),
     insertSim: db.prepare(
-      'INSERT INTO simulations (id, user_id, name, created_at, encrypted_blob, iv) VALUES (?, ?, ?, ?, ?, ?)',
+      `INSERT INTO simulations (id, user_id, name, created_at, updated_at, parent_id, is_main, encrypted_blob, iv)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ),
-    listSims: db.prepare('SELECT id, name, created_at FROM simulations WHERE user_id = ? ORDER BY created_at DESC'),
-    getSim: db.prepare('SELECT id, name, created_at, encrypted_blob, iv FROM simulations WHERE user_id = ? AND id = ?'),
+    listSims: db.prepare(
+      'SELECT id, name, created_at, updated_at, parent_id, is_main FROM simulations WHERE user_id = ? ORDER BY is_main DESC, updated_at DESC, created_at DESC',
+    ),
+    getSim: db.prepare(
+      'SELECT id, name, created_at, updated_at, parent_id, is_main, encrypted_blob, iv FROM simulations WHERE user_id = ? AND id = ?',
+    ),
+    updateSim: db.prepare(
+      'UPDATE simulations SET name = ?, encrypted_blob = ?, iv = ?, updated_at = ? WHERE user_id = ? AND id = ?',
+    ),
+    renameSim: db.prepare('UPDATE simulations SET name = ?, updated_at = ? WHERE user_id = ? AND id = ?'),
+    deleteSim: db.prepare('DELETE FROM simulations WHERE user_id = ? AND id = ?'),
+    clearMain: db.prepare('UPDATE simulations SET is_main = 0 WHERE user_id = ?'),
+    setMain: db.prepare('UPDATE simulations SET is_main = 1, updated_at = ? WHERE user_id = ? AND id = ?'),
   };
+
+  const simRow = (r) => ({
+    id: r.id,
+    name: r.name,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    parentId: r.parent_id ?? null,
+    isMain: !!r.is_main,
+  });
 
   return {
     backend: 'sqlite',
@@ -114,17 +151,37 @@ export function createSqliteStore(path) {
         .all(userId)
         .map((r) => ({ dataType: r.data_type, encryptedBlob: r.encrypted_blob, iv: r.iv, lastModified: r.last_modified }));
     },
+    async getDataVersions(userId) {
+      return stmts.versions.all(userId).map((r) => ({ dataType: r.data_type, lastModified: r.last_modified }));
+    },
 
     async createSimulation(userId, s) {
-      stmts.insertSim.run(s.id, userId, s.name, s.created_at, s.encrypted_blob, s.iv);
+      stmts.insertSim.run(s.id, userId, s.name, s.created_at, s.updated_at ?? s.created_at, s.parent_id ?? null, s.is_main ? 1 : 0, s.encrypted_blob, s.iv);
     },
     async listSimulations(userId) {
-      return stmts.listSims.all(userId).map((r) => ({ id: r.id, name: r.name, createdAt: r.created_at }));
+      return stmts.listSims.all(userId).map(simRow);
     },
     async getSimulation(userId, id) {
-      const row = stmts.getSim.get(userId, id);
-      if (!row) return null;
-      return { id: row.id, name: row.name, createdAt: row.created_at, encryptedBlob: row.encrypted_blob, iv: row.iv };
+      const r = stmts.getSim.get(userId, id);
+      if (!r) return null;
+      return { ...simRow(r), encryptedBlob: r.encrypted_blob, iv: r.iv };
+    },
+    async updateSimulation(userId, id, patch) {
+      const r = stmts.getSim.get(userId, id);
+      if (!r) return false;
+      if (patch.encrypted_blob != null) stmts.updateSim.run(patch.name ?? r.name, patch.encrypted_blob, patch.iv, patch.updated_at, userId, id);
+      else stmts.renameSim.run(patch.name ?? r.name, patch.updated_at, userId, id);
+      return true;
+    },
+    async deleteSimulation(userId, id) {
+      stmts.deleteSim.run(userId, id);
+    },
+    async promoteSimulation(userId, id, ts) {
+      const r = stmts.getSim.get(userId, id);
+      if (!r) return false;
+      stmts.clearMain.run(userId);
+      stmts.setMain.run(ts, userId, id);
+      return true;
     },
 
     /** Solo per il test `server.blindness`: scandisce OGNI colonna di testo di OGNI tabella. */
