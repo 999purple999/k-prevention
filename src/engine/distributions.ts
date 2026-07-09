@@ -11,12 +11,35 @@ export function normalizeDist(d: DistributionInput): Distribution {
   return d;
 }
 
-/** Normale standard N(0,1) via Box-Muller (consuma due uniformi). */
+// Coefficienti dell'approssimazione di Acklam per la quantile normale inversa.
+const A = [-3.969683028665376e1, 2.209460984245205e2, -2.759285104469687e2, 1.38357751867269e2, -3.066479806614716e1, 2.506628277459239];
+const B = [-5.447609879822406e1, 1.615858368580409e2, -1.556989798598866e2, 6.680131188771972e1, -1.328068155288572e1];
+const C = [-7.784894002430293e-3, -3.223964580411365e-1, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
+const D = [7.784695709041462e-3, 3.224671290700398e-1, 2.445134137142996, 3.754408661907416];
+
+/**
+ * Normale standard N(0,1) via QUANTILE INVERSA (Acklam), consumando UNA SOLA uniforme.
+ * Scelta deliberata rispetto a Box-Muller: la quantile è antisimmetrica, Φ⁻¹(1-u) = -Φ⁻¹(u),
+ * quindi la traiettoria antitetica (che consuma 1-u) ottiene esattamente il normale opposto
+ * (corr = -1). Con Box-Muller invece cos(2π(1-u)) = cos(2π·u): i gemelli avrebbero lo STESSO
+ * segno e l'antithetic AUMENTEREBBE la varianza anziché ridurla. Vedi _engineRules.8.
+ */
 export function standardNormal(rng: Rng): number {
-  let u1 = rng();
-  if (u1 < 1e-12) u1 = 1e-12; // evita log(0)
-  const u2 = rng();
-  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  let p = rng();
+  if (p < 1e-15) p = 1e-15;
+  else if (p > 1 - 1e-15) p = 1 - 1e-15;
+  const plow = 0.02425;
+  if (p < plow) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    return (((((C[0] * q + C[1]) * q + C[2]) * q + C[3]) * q + C[4]) * q + C[5]) / ((((D[0] * q + D[1]) * q + D[2]) * q + D[3]) * q + 1);
+  }
+  if (p <= 1 - plow) {
+    const q = p - 0.5;
+    const r = q * q;
+    return ((((((A[0] * r + A[1]) * r + A[2]) * r + A[3]) * r + A[4]) * r + A[5]) * q) / (((((B[0] * r + B[1]) * r + B[2]) * r + B[3]) * r + B[4]) * r + 1);
+  }
+  const q = Math.sqrt(-2 * Math.log(1 - p));
+  return -(((((C[0] * q + C[1]) * q + C[2]) * q + C[3]) * q + C[4]) * q + C[5]) / ((((D[0] * q + D[1]) * q + D[2]) * q + D[3]) * q + 1);
 }
 
 /** Gamma(shape,1) — Marsaglia & Tsang. Serve per la beta. */
