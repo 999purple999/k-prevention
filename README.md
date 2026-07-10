@@ -4,7 +4,7 @@
 
 # k-prevention
 
-### Il copilota di liquidità per liberi professionisti — simulatore Monte Carlo<br/>cifrato end-to-end, d'uso quotidiano, con ponte AI. Su Google Cloud Run.
+### Il copilota di liquidità per liberi professionisti — simulatore Monte Carlo<br/>cifrato end-to-end, d'uso quotidiano, con ponte AI. Su Cloudflare (Workers + D1).
 
 [![CI](https://github.com/999purple999/k-prevention/actions/workflows/ci.yml/badge.svg)](https://github.com/999purple999/k-prevention/actions/workflows/ci.yml)
 [![Deploy demo to GitHub Pages](https://github.com/999purple999/k-prevention/actions/workflows/pages.yml/badge.svg)](https://github.com/999purple999/k-prevention/actions/workflows/pages.yml)
@@ -17,9 +17,9 @@
 ![Tailwind](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white)
 ![Recharts](https://img.shields.io/badge/Recharts-FF6384?logo=chartdotjs&logoColor=white)
 ![Node](https://img.shields.io/badge/Node_%E2%89%A5_22-339933?logo=nodedotjs&logoColor=white)
-![Google Cloud Run](https://img.shields.io/badge/Cloud_Run-4285F4?logo=googlecloud&logoColor=white)
+![Cloudflare Workers](https://img.shields.io/badge/Cloudflare_Workers-F38020?logo=cloudflare&logoColor=white)
 
-**[▶ Prova la demo dal vivo](https://999purple999.github.io/k-prevention/)** &nbsp;·&nbsp; funziona anche da telefono, nessun account necessario.
+**[🚀 App completa (Cloudflare)](https://k-prevention.accessisoftwarefrancesco.workers.dev)** &nbsp;·&nbsp; **[▶ Demo statica (GitHub Pages)](https://999purple999.github.io/k-prevention/)** &nbsp;·&nbsp; funzionano anche da telefono.
 
 </div>
 
@@ -39,13 +39,13 @@ decifrato i dati con una chiave derivata dalla tua password.
 
 Ci sono **due modi** di provare k-prevention, entrambi accessibili da qualsiasi dispositivo (desktop, tablet, telefono):
 
-| | Demo statica (GitHub Pages) | App completa (Google Cloud Run) |
+| | Demo statica (GitHub Pages) | App completa (Cloudflare) |
 |---|---|---|
-| **URL** | `https://999purple999.github.io/k-prevention/` | `https://k-prevention-…run.app` (dopo il deploy) |
+| **URL** | `https://999purple999.github.io/k-prevention/` | `https://k-prevention.accessisoftwarefrancesco.workers.dev` |
 | **Login** | nessuno — entri subito con i dati d'esempio | account reale (email + password) |
-| **Backend** | nessuno: tutto nel browser | server Node su Cloud Run |
+| **Backend** | nessuno: tutto nel browser | Cloudflare Worker + D1 |
 | **Cifratura** | non necessaria (dati d'esempio) | end-to-end (il server è cieco) |
-| **Persistenza** | `localStorage` del browser | Firestore |
+| **Persistenza** | `localStorage` del browser | Cloudflare D1 |
 | **A cosa serve** | mostrare l'app in 2 secondi, anche dal telefono | uso reale con i tuoi dati privati |
 
 La demo è **responsive** e pensata anche per lo schermo del telefono. La build statica è prodotta da
@@ -61,7 +61,7 @@ La demo è **responsive** e pensata anche per lo schermo del telefono. La build 
 - [Variabili d'ambiente e secret](#variabili-dambiente-e-secret)
 - [Utente predefinito (Francesco Pernice)](#utente-predefinito-francesco-pernice)
 - [Test](#test)
-- [Deploy su Google Cloud Run](#deploy-su-google-cloud-run)
+- [Deploy su Cloudflare (Workers + D1)](#deploy-su-cloudflare-workers--d1)
 - [Compromesso sulla persistenza della chiave](#compromesso-sulla-persistenza-della-chiave)
 - [Cosa il server può e non può vedere](#cosa-il-server-può-e-non-può-vedere)
 - [Limiti del modello](#limiti-del-modello)
@@ -117,7 +117,7 @@ tiene la chiave sul tuo dispositivo. È l'approccio più sicuro (niente chiaro n
 
 ```bash
 # imposta l'endpoint e le credenziali (o verranno chieste)
-export KPREV_BASE="https://k-prevention-….run.app"   # o http://localhost:8080
+export KPREV_BASE="https://k-prevention.accessisoftwarefrancesco.workers.dev"   # o http://localhost:8787 (wrangler dev)
 export KPREV_EMAIL="francesco.pernice@k-prevention.app"
 export KPREV_PASSWORD="…"
 
@@ -142,7 +142,7 @@ il migliore funziona (es. *"studio essenziale + niente spese superflue → rovin
     "kprev": {
       "command": "node",
       "args": ["/PERCORSO/ASSOLUTO/mcp/kprev-mcp.js"],
-      "env": { "KPREV_BASE": "https://…run.app", "KPREV_EMAIL": "…", "KPREV_PASSWORD": "…" }
+      "env": { "KPREV_BASE": "https://k-prevention.accessisoftwarefrancesco.workers.dev", "KPREV_EMAIL": "…", "KPREV_PASSWORD": "…" }
     }
   }
 }
@@ -152,13 +152,16 @@ Strumenti: `kprev_pull`, `kprev_simulate`, `kprev_optimize`, `kprev_list_scenari
 
 ## Architettura
 
-Un solo servizio Node/Express servito da Cloud Run: la SPA React (build in `/dist`) e le API `/api/*` insieme.
+In **produzione** un solo **Worker Cloudflare** con Static Assets: la SPA React (build in `/dist`) e le API
+`/api/*` nello stesso deploy, con **D1** come database. In **locale**, per l'HMR del frontend, c'è un server
+Node/Express equivalente (stessa API, backend SQLite). Il modulo di crittografia è isomorfo: lo stesso codice
+gira nel browser, nel Worker e in Node.
 
 ```
-Browser (React SPA)                         Cloud Run (Express)              Persistenza
-─────────────────────                       ───────────────────              ───────────
-password ──PBKDF2─┬─► authProof ───────────► ri-hash scrypt ──────────────►  users
-                  └─► KEK (solo in RAM)                                       (Firestore / SQLite)
+Browser (React SPA)                         Cloudflare Worker (o Express)     Persistenza
+─────────────────────                       ────────────────────────────     ───────────
+password ──PBKDF2─┬─► authProof ───────────► ri-hash HMAC (Worker) ────────►  users
+                  └─► KEK (solo in RAM)          scrypt (Node locale)         (D1 / SQLite)
 DEK (casuale) ──wrap con KEK──► wrappedDek ─► salvato così com'è
 dati ──AES-GCM(DEK, aad)──► blob cifrato ───► passacarte (nessun JSON.parse) ► user_data
 simulate() ◄── Web Worker ◄── decifra nel main thread
@@ -166,8 +169,8 @@ simulate() ◄── Web Worker ◄── decifra nel main thread
 
 - **Frontend**: React 18, Vite, TypeScript, Tailwind, React Router, Recharts.
 - **Motore**: `src/engine/*` (puro, testato), `src/workers/simulation.worker.ts`.
-- **Backend**: `server/*` (Express, `jose` per i JWT, scrypt per il ri-hash).
-- **Store**: `server/store/` — `node:sqlite` (locale, zero dipendenze native) o **Firestore** (produzione).
+- **Backend produzione**: `worker/*` (Cloudflare Worker con Hono, `jose` per i JWT, HMAC per il ri-hash) + **D1**.
+- **Backend locale/dev**: `server/*` (Express, `node:sqlite`) — comodo per l'HMR; non è il deploy di produzione.
 
 ## Avvio rapido (locale)
 
@@ -202,9 +205,9 @@ npm start
 | `SERVER_SECRET` | **sì** | 32 byte base64. Firma i JWT, deriva `email_lookup` e i sali finti. In produzione l'app **rifiuta** di partire con il valore di default. |
 | `STORE_BACKEND` | no | `sqlite` (default) o `firestore`. |
 | `SQLITE_PATH` | no | Percorso del file DB (solo backend sqlite). Default `./data/k-prevention.db`. |
-| `GOOGLE_CLOUD_PROJECT` | solo Firestore | Su Cloud Run è iniettata automaticamente. |
+| `GOOGLE_CLOUD_PROJECT` | solo backend Firestore | Opzionale, solo per il server Node locale con `STORE_BACKEND=firestore`. |
 | `FIRESTORE_DATABASE_ID` | no | Default `(default)`. |
-| `PORT` | no | Cloud Run la inietta (default 8080). |
+| `PORT` | no | Porta del server Node locale (default 8080). Su Cloudflare non serve. |
 | `FRANCESCO_PASSWORD` | no | Se impostata, il seed usa questa password fissa (deploy riproducibile) invece di generarne una. |
 
 ## Utente predefinito (Francesco Pernice)
@@ -233,39 +236,43 @@ il **canarino della blindness** (una stringa segreta salvata non compare in ness
 del motore, timing fiscale (cassa a giugno/novembre), il fatto che il forfettario ignora le deduzioni, la coda
 pesante degli imprevisti, la convergenza e l'errore esplicito su un'aliquota mancante.
 
-## Deploy su Google Cloud Run
+## Deploy su Cloudflare (Workers + D1)
 
-Un solo comando fa build + deploy (Cloud Build; **non serve Docker in locale**). Firestore come persistenza.
-L'utente Francesco viene creato **automaticamente all'avvio del servizio** (`SEED_ON_START=1`), nello stesso
-processo del server: stesso `SERVER_SECRET` (nessun mismatch) e credenziali del service account (**non serve
-`gcloud auth application-default login`**). Il seed è idempotente: non sovrascrive un utente già presente.
+Un solo Worker con **Static Assets**: la SPA React e le API `/api/*` nello stesso deploy (`wrangler.jsonc`,
+`worker/index.ts`), con **D1** come database. Gratis sul piano free, nessun server da gestire.
 
-**Modo semplice — lo script:**
-```powershell
-gcloud auth login
-.\deploy.ps1 -Project "il-tuo-progetto"        # -FrancescoPassword "..." opzionale (altrimenti generata)
-```
-Lo script abilita le API, crea Firestore se manca, genera `SERVER_SECRET` + la password, fa il deploy e stampa
-URL e credenziali (salvate anche in `FRANCESCO_CREDENTIALS.txt`).
-
-**Modo manuale:**
 ```bash
-gcloud auth login
-gcloud config set project IL_TUO_PROGETTO
-gcloud services enable run.googleapis.com cloudbuild.googleapis.com firestore.googleapis.com
-gcloud firestore databases create --location=eur3          # se non esiste già
+# 0. prerequisiti: wrangler autenticato
+npx wrangler login
 
-SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")
-gcloud run deploy k-prevention \
-  --source . --region europe-west1 --allow-unauthenticated \
-  --set-env-vars "STORE_BACKEND=firestore,SERVER_SECRET=$SECRET,SEED_ON_START=1,FRANCESCO_PASSWORD=scegli-una-password"
+# 1. crea il database D1 e riporta il database_id in wrangler.jsonc
+npx wrangler d1 create k-prevention-db
+
+# 2. applica lo schema (locale per `wrangler dev`, e remoto per la produzione)
+npx wrangler d1 migrations apply k-prevention-db --local
+npx wrangler d1 migrations apply k-prevention-db --remote
+
+# 3. build della SPA + deploy del Worker
+npm run build
+npx wrangler deploy
+
+# 4. imposta il segreto di produzione (HMAC email_lookup / auth_hash / firma JWT)
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))" | npx wrangler secret put SERVER_SECRET
+
+# 5. crea l'utente Francesco (la derivazione PBKDF2 a 600k gira in LOCALE — sforerebbe la
+#    CPU del free tier nel Worker — e si inseriscono in D1 le righe già cifrate: E2E intatto)
+SERVER_SECRET="<lo stesso segreto del passo 4>" FRANCESCO_PASSWORD="scegli-una-password" \
+  node scripts/seed-d1.mjs --out seed.sql
+npx wrangler d1 execute k-prevention-db --remote --file seed.sql
 ```
 
-Cloud Run restituisce l'URL `https://k-prevention-...-ew.a.run.app`. Il `Dockerfile` multi-stage (Node 24)
-consente anche `gcloud run deploy --image` o qualsiasi altro runtime a container.
+Sviluppo locale col runtime Cloudflare: `npx wrangler dev` (Worker + D1 locale + asset).
+In alternativa, per HMR sul frontend, `npm run dev` avvia Vite + un server Node/Express equivalente
+(stessa API, backend SQLite) — comodo in locale ma **non** è il deploy di produzione.
 
-> Nota di sicurezza: passare `SERVER_SECRET` via `--set-env-vars` è comodo per una demo. In produzione seria usa
-> **Secret Manager**: `--set-secrets SERVER_SECRET=kprev-secret:latest`.
+> Perché il seed gira in locale e non nel Worker: la derivazione della chiave (PBKDF2, 600k iterazioni)
+> è volutamente costosa e supera il budget CPU del free tier. Il login normale non ne risente: la
+> derivazione pesante avviene sul client, il Worker fa solo un HMAC (veloce).
 
 ## Compromesso sulla persistenza della chiave
 
@@ -314,4 +321,4 @@ La chiave che decifra i tuoi dati (la **DEK**) vive **solo nella memoria del bro
 ---
 
 Costruito seguendo le tre fasi del progetto (fondamenta+crypto, motore, UI+deploy). Vedi `PROGRESS.md` per il
-dettaglio delle decisioni e degli adattamenti da Cloudflare a Google Cloud Run.
+dettaglio delle decisioni e degli adattamenti verso Cloudflare (Workers + D1).

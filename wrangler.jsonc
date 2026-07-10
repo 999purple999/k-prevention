@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "k-prevention",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-07-10",
+  "compatibility_flags": ["nodejs_compat"],
+  // Un solo Worker con Static Assets: la SPA React + le API `/api/*` nello stesso deploy.
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // Con compatibility_date ≥ 2025-04-01 le navigation request non invocano il Worker:
+    // run_worker_first lo rende esplicito sui path API.
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "k-prevention-db",
+      "database_id": "595aec4a-56f1-4b25-bd87-0dcecaf5687c"
+    }
+  ],
+  "observability": { "enabled": true }
+}
