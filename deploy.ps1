@@ -37,10 +37,15 @@ Write-Host "==> Segreto e password generati."
 
 Write-Host "==> Deploy (build da sorgente via Cloud Build) + seed automatico all'avvio..."
 $envVars = "STORE_BACKEND=firestore,SERVER_SECRET=$secret,SEED_ON_START=1,FRANCESCO_PASSWORD=$FrancescoPassword"
+# --min-instances 1: tiene un'istanza calda per lo stream SSE della sync e azzera il ritardo
+#   del seed al primo accesso (metti 0 per risparmiare: la sync ripiega sul polling ogni 20s).
+# --timeout 3600: le connessioni SSE sono a lunga durata.
 gcloud run deploy $Service `
   --source . `
   --region $Region `
   --allow-unauthenticated `
+  --min-instances 1 `
+  --timeout 3600 `
   --set-env-vars $envVars
 
 $url = gcloud run services describe $Service --region $Region --format="value(status.url)"
