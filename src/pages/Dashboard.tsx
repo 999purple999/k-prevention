@@ -4,6 +4,7 @@ import { useData } from '../lib/data.tsx';
 import { useSimulation } from '../hooks/useSimulation.ts';
 import { validateTaxModel } from '../engine/tax.ts';
 import { RiskPanel } from '../components/RiskPanel.tsx';
+import { SensitivityPanel } from '../components/SensitivityPanel.tsx';
 import { PlanVsActual } from '../components/PlanVsActual.tsx';
 import { FanChart } from '../components/charts/FanChart.tsx';
 import { CashflowBars } from '../components/charts/CashflowBars.tsx';
@@ -174,6 +175,9 @@ export function Dashboard() {
       ) : (
         <div className="flex items-center justify-center gap-2 py-16 text-sm" style={{ color: 'rgb(var(--text-dim))' }}><Spinner /> Prima simulazione in corso…</div>
       )}
+
+      {/* Analisi di sensibilità */}
+      {data && !isConsolidato && !blocked.blocked && <SensitivityPanel />}
 
       {/* Editors */}
       {data && !isConsolidato && (
