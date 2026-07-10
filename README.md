@@ -6,9 +6,9 @@
 
 ### Il copilota di liquidità per liberi professionisti — simulatore Monte Carlo<br/>cifrato end-to-end, d'uso quotidiano, con ponte AI. Su Google Cloud Run.
 
-[![CI](https://github.com/OWNER/k-prevention/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/k-prevention/actions/workflows/ci.yml)
-[![Deploy demo to GitHub Pages](https://github.com/OWNER/k-prevention/actions/workflows/pages.yml/badge.svg)](https://github.com/OWNER/k-prevention/actions/workflows/pages.yml)
-[![Demo dal vivo](https://img.shields.io/badge/%F0%9F%9A%80%20demo-dal%20vivo-22cee9)](https://OWNER.github.io/k-prevention/)
+[![CI](https://github.com/999purple999/k-prevention/actions/workflows/ci.yml/badge.svg)](https://github.com/999purple999/k-prevention/actions/workflows/ci.yml)
+[![Deploy demo to GitHub Pages](https://github.com/999purple999/k-prevention/actions/workflows/pages.yml/badge.svg)](https://github.com/999purple999/k-prevention/actions/workflows/pages.yml)
+[![Demo dal vivo](https://img.shields.io/badge/%F0%9F%9A%80%20demo-dal%20vivo-22cee9)](https://999purple999.github.io/k-prevention/)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
@@ -19,7 +19,7 @@
 ![Node](https://img.shields.io/badge/Node_%E2%89%A5_22-339933?logo=nodedotjs&logoColor=white)
 ![Google Cloud Run](https://img.shields.io/badge/Cloud_Run-4285F4?logo=googlecloud&logoColor=white)
 
-**[▶ Prova la demo dal vivo](https://OWNER.github.io/k-prevention/)** &nbsp;·&nbsp; funziona anche da telefono, nessun account necessario.
+**[▶ Prova la demo dal vivo](https://999purple999.github.io/k-prevention/)** &nbsp;·&nbsp; funziona anche da telefono, nessun account necessario.
 
 </div>
 
@@ -33,8 +33,6 @@
 Il server è un **passacarte cieco**: vede solo blob cifrati. Ogni calcolo avviene nel tuo browser, dopo aver
 decifrato i dati con una chiave derivata dalla tua password.
 
-> 🔎 **`OWNER`** nei link va sostituito con il tuo utente GitHub (lo faccio automaticamente alla creazione del repo).
-
 ---
 
 ## 📱 Demo dal vivo e uso da telefono
@@ -43,7 +41,7 @@ Ci sono **due modi** di provare k-prevention, entrambi accessibili da qualsiasi 
 
 | | Demo statica (GitHub Pages) | App completa (Google Cloud Run) |
 |---|---|---|
-| **URL** | `https://OWNER.github.io/k-prevention/` | `https://k-prevention-…run.app` (dopo il deploy) |
+| **URL** | `https://999purple999.github.io/k-prevention/` | `https://k-prevention-…run.app` (dopo il deploy) |
 | **Login** | nessuno — entri subito con i dati d'esempio | account reale (email + password) |
 | **Backend** | nessuno: tutto nel browser | server Node su Cloud Run |
 | **Cifratura** | non necessaria (dati d'esempio) | end-to-end (il server è cieco) |
