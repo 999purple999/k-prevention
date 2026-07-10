@@ -70,18 +70,18 @@ export function createD1Store(db: D1Database) {
       return (results ?? []).map((r) => ({ dataType: r.data_type, lastModified: r.last_modified }));
     },
 
-    async createSimulation(userId: string, s: { id: string; name: string; created_at: number; updated_at: number; parent_id: string | null; is_main: boolean; encrypted_blob: string; iv: string }): Promise<void> {
+    async createSimulation(userId: string, s: { id: string; name: string; workspace_id: string; created_at: number; updated_at: number; parent_id: string | null; is_main: boolean; encrypted_blob: string; iv: string }): Promise<void> {
       await db
-        .prepare('INSERT INTO simulations (id, user_id, name, created_at, updated_at, parent_id, is_main, encrypted_blob, iv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .bind(s.id, userId, s.name, s.created_at, s.updated_at, s.parent_id, s.is_main ? 1 : 0, s.encrypted_blob, s.iv)
+        .prepare('INSERT INTO simulations (id, user_id, name, workspace_id, created_at, updated_at, parent_id, is_main, encrypted_blob, iv) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .bind(s.id, userId, s.name, s.workspace_id, s.created_at, s.updated_at, s.parent_id, s.is_main ? 1 : 0, s.encrypted_blob, s.iv)
         .run();
     },
-    async listSimulations(userId: string) {
+    async listSimulations(userId: string, workspaceId = 'default') {
       const { results } = await db
-        .prepare('SELECT id, name, created_at, updated_at, parent_id, is_main FROM simulations WHERE user_id = ? ORDER BY created_at DESC')
-        .bind(userId)
-        .all<{ id: string; name: string; created_at: number; updated_at: number; parent_id: string | null; is_main: number }>();
-      return (results ?? []).map((r) => ({ id: r.id, name: r.name, createdAt: r.created_at, updatedAt: r.updated_at, parentId: r.parent_id, isMain: !!r.is_main }));
+        .prepare('SELECT id, name, workspace_id, created_at, updated_at, parent_id, is_main FROM simulations WHERE user_id = ? AND workspace_id = ? ORDER BY created_at DESC')
+        .bind(userId, workspaceId)
+        .all<{ id: string; name: string; workspace_id: string; created_at: number; updated_at: number; parent_id: string | null; is_main: number }>();
+      return (results ?? []).map((r) => ({ id: r.id, name: r.name, workspaceId: r.workspace_id, createdAt: r.created_at, updatedAt: r.updated_at, parentId: r.parent_id, isMain: !!r.is_main }));
     },
     async getSimulation(userId: string, id: string) {
       const r = await db
@@ -102,10 +102,11 @@ export function createD1Store(db: D1Database) {
       await db.prepare('DELETE FROM simulations WHERE user_id = ? AND id = ?').bind(userId, id).run();
     },
     async promoteSimulation(userId: string, id: string, ts: number): Promise<boolean> {
-      const exists = await db.prepare('SELECT id FROM simulations WHERE user_id = ? AND id = ?').bind(userId, id).first();
-      if (!exists) return false;
+      const row = await db.prepare('SELECT workspace_id FROM simulations WHERE user_id = ? AND id = ?').bind(userId, id).first<{ workspace_id: string }>();
+      if (!row) return false;
+      // «principale» è per-workspace: azzera solo gli scenari dello stesso workspace.
       await db.batch([
-        db.prepare('UPDATE simulations SET is_main = 0 WHERE user_id = ?').bind(userId),
+        db.prepare('UPDATE simulations SET is_main = 0 WHERE user_id = ? AND workspace_id = ?').bind(userId, row.workspace_id),
         db.prepare('UPDATE simulations SET is_main = 1, updated_at = ? WHERE user_id = ? AND id = ?').bind(ts, userId, id),
       ]);
       return true;

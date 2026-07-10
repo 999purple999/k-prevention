@@ -16,7 +16,7 @@ interface CompareCol {
 }
 
 export function Scenarios() {
-  const { data, save, scenariosRev } = useData();
+  const { data, save, scenariosRev, workspaces, activeWorkspace, isConsolidato } = useData();
   const { encryptFor, decryptFor } = useSession();
   const [list, setList] = useState<SimulationMeta[]>([]);
   const [busy, setBusy] = useState('');
@@ -24,16 +24,20 @@ export function Scenarios() {
   const [compare, setCompare] = useState<CompareCol[] | null>(null);
   const [compareSel, setCompareSel] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+  const ws = workspaces.find((w) => w.id === activeWorkspace);
 
   const refresh = useCallback(async () => {
+    if (isConsolidato) { setList([]); return; }
     try {
-      setList(await api.listSimulations());
+      setList(await api.listSimulations(activeWorkspace));
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [activeWorkspace, isConsolidato]);
 
   useEffect(() => {
+    setCompare(null);
+    setCompareSel([]);
     void refresh();
   }, [refresh, scenariosRev]);
 
@@ -51,7 +55,7 @@ export function Scenarios() {
     setBusy('save');
     try {
       const { ciphertext, iv } = await encryptFor('simulations', modelFromData(data));
-      await api.saveSimulation(nm, ciphertext, iv, mainId, list.length === 0);
+      await api.saveSimulation(nm, ciphertext, iv, mainId, list.length === 0, activeWorkspace);
       setName('');
       await refresh();
     } finally {
@@ -132,7 +136,7 @@ export function Scenarios() {
       }
       for (const it of items) {
         const { ciphertext, iv } = await encryptFor('simulations', it.model);
-        await api.saveSimulation(it.name, ciphertext, iv, null, false);
+        await api.saveSimulation(it.name, ciphertext, iv, null, false, activeWorkspace);
       }
       await refresh();
       if (!items.length) alert('Nessuno scenario valido nel file.');
@@ -165,19 +169,34 @@ export function Scenarios() {
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Scenari</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">Scenari</h1>
+            {ws && (
+              <span className="chip inline-flex items-center gap-1.5" style={{ borderColor: ws.color }} title="Gli scenari sono separati per ogni workspace">
+                <span className="inline-block h-2 w-2 rounded-full" style={{ background: ws.color }} />
+                {ws.emoji} {ws.name}
+              </span>
+            )}
+          </div>
           <p className="mt-0.5 text-sm" style={{ color: 'rgb(var(--text-dim))' }}>
-            Rami del tuo piano. Salva l'attuale come ramo, confronta, promuovi il migliore a principale — come su Git.
+            Rami del tuo piano, separati per ogni workspace. Salva l'attuale come ramo, confronta, promuovi il migliore a principale — come su Git.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button className="btn-ghost" onClick={() => fileRef.current?.click()}>Importa</button>
-          <button className="btn-ghost" onClick={exportAll} disabled={!list.length || busy === 'exportAll'}>{busy === 'exportAll' ? <Spinner /> : null}Esporta tutti</button>
-          <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0])} />
-        </div>
+        {!isConsolidato && (
+          <div className="flex items-center gap-2">
+            <button className="btn-ghost" onClick={() => fileRef.current?.click()}>Importa</button>
+            <button className="btn-ghost" onClick={exportAll} disabled={!list.length || busy === 'exportAll'}>{busy === 'exportAll' ? <Spinner /> : null}Esporta tutti</button>
+            <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => e.target.files?.[0] && onImport(e.target.files[0])} />
+          </div>
+        )}
       </div>
 
-      {/* Salva attuale */}
+      {isConsolidato ? (
+        <div className="panel p-8 text-center text-sm" style={{ color: 'rgb(var(--text-dim))' }}>
+          La vista Consolidata è in sola lettura: seleziona un workspace specifico per salvare e confrontare scenari.
+        </div>
+      ) : (
+      /* Salva attuale */
       <div className="panel p-4">
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex-1">
@@ -187,6 +206,7 @@ export function Scenarios() {
           <button className="btn-primary" onClick={saveCurrent} disabled={busy === 'save'}>{busy === 'save' ? <Spinner /> : null}+ Salva ramo</button>
         </div>
       </div>
+      )}
 
       {/* Confronto */}
       {compareSel.length > 0 && (

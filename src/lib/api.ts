@@ -52,6 +52,7 @@ export interface StoredBlobWithType extends StoredBlob {
 export interface SimulationMeta {
   id: string;
   name: string;
+  workspaceId?: string;
   createdAt: number;
   updatedAt: number;
   parentId: string | null;
@@ -86,9 +87,10 @@ export const api = {
     req<{ ok: boolean; lastModified: number }>('PUT', `/api/data/${type}`, { encryptedBlob, iv, baseVersion }),
   deleteData: (type: string) => req<{ ok: boolean }>('DELETE', `/api/data/${type}`),
 
-  saveSimulation: (name: string, encryptedBlob: string, iv: string, parentId?: string | null, isMain?: boolean) =>
-    req<{ id: string; createdAt: number }>('POST', '/api/simulations', { name, encryptedBlob, iv, parentId, isMain }),
-  listSimulations: () => req<SimulationMeta[]>('GET', '/api/simulations'),
+  saveSimulation: (name: string, encryptedBlob: string, iv: string, parentId?: string | null, isMain?: boolean, workspaceId?: string) =>
+    req<{ id: string; createdAt: number }>('POST', '/api/simulations', { name, encryptedBlob, iv, parentId, isMain, workspaceId }),
+  listSimulations: (workspaceId?: string) =>
+    req<SimulationMeta[]>('GET', `/api/simulations${workspaceId ? `?workspace=${encodeURIComponent(workspaceId)}` : ''}`),
   getSimulation: (id: string) =>
     req<StoredBlob & SimulationMeta>('GET', `/api/simulations/${id}`),
   updateSimulation: (id: string, patch: { name?: string; encryptedBlob?: string; iv?: string }) =>

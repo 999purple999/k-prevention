@@ -32,6 +32,9 @@ const DATA_TYPES = [...BASE_TYPES, 'workspaces'];
 const NS_RE = new RegExp(`^w_[a-z0-9]{1,16}_(${BASE_TYPES.join('|')})$`);
 // Multi-workspace: tipi base + `workspaces` (indice) + namespaced `w_<id>_<tipo>`.
 const isValidType = (t: string) => DATA_TYPES.includes(t) || NS_RE.test(t);
+// Un workspace id valido: 'default' o [a-z0-9]{1,16}. Esclude '__all__' (consolidato): gli
+// scenari non si creano nella vista consolidata.
+const wsIdOr = (v: unknown, fallback = 'default') => (typeof v === 'string' && /^[a-z0-9]{1,16}$/.test(v) ? v : fallback);
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
@@ -163,14 +166,14 @@ app.delete('/api/data/:type', requireAuth, async (c) => {
 
 // ---------------- scenari (stile Git) ----------------
 app.post('/api/simulations', requireAuth, async (c) => {
-  const { name, encryptedBlob, iv, parentId, isMain } = await c.req.json().catch(() => ({}));
+  const { name, encryptedBlob, iv, parentId, isMain, workspaceId } = await c.req.json().catch(() => ({}));
   if (typeof name !== 'string' || typeof encryptedBlob !== 'string' || typeof iv !== 'string') return c.json({ error: 'payload non valido' }, 400);
   const id = newId();
   const now = Date.now();
-  await createD1Store(c.env.DB).createSimulation(c.get('userId'), { id, name, created_at: now, updated_at: now, parent_id: parentId ?? null, is_main: !!isMain, encrypted_blob: encryptedBlob, iv });
+  await createD1Store(c.env.DB).createSimulation(c.get('userId'), { id, name, workspace_id: wsIdOr(workspaceId), created_at: now, updated_at: now, parent_id: parentId ?? null, is_main: !!isMain, encrypted_blob: encryptedBlob, iv });
   return c.json({ id, createdAt: now }, 201);
 });
-app.get('/api/simulations', requireAuth, async (c) => c.json(await createD1Store(c.env.DB).listSimulations(c.get('userId'))));
+app.get('/api/simulations', requireAuth, async (c) => c.json(await createD1Store(c.env.DB).listSimulations(c.get('userId'), wsIdOr(c.req.query('workspace')))));
 app.get('/api/simulations/:id', requireAuth, async (c) => {
   const sim = await createD1Store(c.env.DB).getSimulation(c.get('userId'), c.req.param('id'));
   if (!sim) return c.json({ error: 'non trovata' }, 404);

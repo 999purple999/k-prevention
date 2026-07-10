@@ -60,24 +60,27 @@ export function dataRouter(store) {
 
   // ---- Scenari (simulazioni salvate, stile Git) ----
 
-  // POST /api/simulations  body { name, encryptedBlob, iv, parentId?, isMain? }
+  // Un workspace id valido: 'default' o [a-z0-9]{1,16} (esclude '__all__' = consolidato).
+  const wsIdOr = (v, fallback = 'default') => (typeof v === 'string' && /^[a-z0-9]{1,16}$/.test(v) ? v : fallback);
+
+  // POST /api/simulations  body { name, encryptedBlob, iv, parentId?, isMain?, workspaceId? }
   r.post('/simulations', ah(async (req, res) => {
-    const { name, encryptedBlob, iv, parentId, isMain } = req.body || {};
+    const { name, encryptedBlob, iv, parentId, isMain, workspaceId } = req.body || {};
     if (typeof name !== 'string' || typeof encryptedBlob !== 'string' || typeof iv !== 'string') {
       return res.status(400).json({ error: 'payload non valido' });
     }
     const id = newId();
     const now = Date.now();
     await store.createSimulation(req.userId, {
-      id, name, created_at: now, updated_at: now, parent_id: parentId ?? null, is_main: !!isMain, encrypted_blob: encryptedBlob, iv,
+      id, name, workspace_id: wsIdOr(workspaceId), created_at: now, updated_at: now, parent_id: parentId ?? null, is_main: !!isMain, encrypted_blob: encryptedBlob, iv,
     });
     publish(req.userId, { type: 'simulations', lastModified: now });
     res.status(201).json({ id, createdAt: now });
   }));
 
-  // GET /api/simulations — metadati estesi.
+  // GET /api/simulations?workspace=<id> — metadati estesi, filtrati per workspace.
   r.get('/simulations', ah(async (req, res) => {
-    res.json(await store.listSimulations(req.userId));
+    res.json(await store.listSimulations(req.userId, wsIdOr(req.query.workspace)));
   }));
 
   // GET /api/simulations/:id — blob cifrato.
