@@ -38,7 +38,7 @@ export function ProjectionPanel() {
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold">Proiezione a lungo termine</h2>
-          <Help text="Una sola simulazione fino a 30 anni: le finestre 1/5/10/20/30 anni sono fette dello STESSO run, quindi davvero comparabili (stesso seed, stesse estrazioni). Isola la sezione temporale che vuoi." />
+          <Help text="Una sola simulazione fino a 30 anni: le finestre 1/5/10/20/30 anni sono fette dello STESSO identico run (non simulazioni separate), quindi i primi 12 mesi della vista a 30 anni sono esattamente gli stessi. Isola la sezione temporale che vuoi." />
         </div>
         <div className="flex items-center gap-2">
           <select className="field !w-auto !py-1 text-xs" value={iters} onChange={(e) => setIters(Number(e.target.value))} title="Più iterazioni = più preciso ma più lento">

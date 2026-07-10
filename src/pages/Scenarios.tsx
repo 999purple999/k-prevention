@@ -167,6 +167,10 @@ export function Scenarios() {
   const runCompare = async () => {
     setBusy('compare');
     try {
+      // Punto di partenza COMUNE: tutti gli scenari partono dalla stessa data e dallo stesso
+      // capitale (quelli del modello attuale), così l'asse temporale è allineato e le
+      // differenze vengono dal modello, non dal punto di partenza o dal ledger.
+      const baseCfg = inputFromModel(modelFromData(data)).simulationConfig;
       const runOne = (model: ScenarioModel, label: string): CompareCol => {
         const inp = inputFromModel(model);
         return {
@@ -174,8 +178,8 @@ export function Scenarios() {
           out: simulate(
             {
               ...inp,
-              monteCarlo: { ...inp.monteCarlo, seed: COMPARE_SEED },
-              simulationConfig: { ...inp.simulationConfig, simulationHorizons: COMPARE_HORIZONS },
+              monteCarlo: { ...inp.monteCarlo, seed: COMPARE_SEED, antitheticVariates: true },
+              simulationConfig: { ...inp.simulationConfig, startDate: baseCfg.startDate, initialCapital: baseCfg.initialCapital, simulationHorizons: COMPARE_HORIZONS },
             },
             { iterationsOverride: 1500 },
           ),
@@ -263,7 +267,7 @@ export function Scenarios() {
               <CompareChart cols={compare} win={compareWin} />
               <CompareTable cols={compare} h={compareWin} />
               <p className="mt-2 text-[11px]" style={{ color: 'rgb(var(--text-dim))' }}>
-                Tutti gli scenari usano lo stesso seed e lo stesso run a 30 anni: le finestre sono fette dello stesso identico run, quindi comparabili. Se un scenario ha un conto investimento, la linea è il patrimonio netto (cassa + fondo).
+                Tutti gli scenari partono dallo stesso punto (data e capitale iniziale), con lo stesso seed e lo stesso orizzonte a 30 anni: l'asse temporale è allineato e le finestre sono fette dello stesso run, così le differenze vengono soprattutto dal modello. Se uno scenario ha un fondo, la linea è il patrimonio netto (cassa + fondo).
               </p>
             </>
           )}

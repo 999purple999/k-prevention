@@ -74,8 +74,9 @@ export function simulate(input: SimulationInput, opts: SimulateOptions = {}): Si
   const sogliaUscita = tax.regime === 'forfettario' ? tax.forfettario?.sogliaUscitaImmediataEUR ?? null : null;
 
   // Conto investimento opzionale: tasso mensile equivalente al rendimento annuo composto.
+  // Guardia: annualReturnPct <= -100 azzererebbe/renderebbe NaN la base della potenza.
   const inv = cfg.investmentAccount?.enabled ? cfg.investmentAccount : null;
-  const invMonthlyRate = inv ? Math.pow(1 + inv.annualReturnPct / 100, 1 / 12) - 1 : 0;
+  const invMonthlyRate = inv ? (inv.annualReturnPct <= -100 ? -1 : Math.pow(1 + inv.annualReturnPct / 100, 1 / 12) - 1) : 0;
 
   const antithetic = mc.antitheticVariates !== false;
   let N = opts.iterationsOverride ?? mc.iterations;
@@ -209,10 +210,13 @@ export function simulate(input: SimulationInput, opts: SimulateOptions = {}): Si
 
       // (12) conto investimento: il fondo cresce, poi si versa la quota mensile
       // spostandola DALLA cassa (trasferimento: il patrimonio non cambia, ma la
-      // cassa cala e il fondo compone). La rovina resta misurata sulla sola cassa.
+      // cassa cala e il fondo compone). Si versa SOLO ciò che la cassa permette: niente
+      // «leva a costo zero» che gonfierebbe il patrimonio nelle traiettorie insolventi.
+      // La rovina resta misurata sulla sola cassa.
       if (inv) {
-        invBalance = invBalance * (1 + invMonthlyRate) + inv.monthlyContribution;
-        capital -= inv.monthlyContribution;
+        const contrib = Math.max(0, Math.min(inv.monthlyContribution, capital));
+        invBalance = invBalance * (1 + invMonthlyRate) + contrib;
+        capital -= contrib;
         invArr![m][idx] = invBalance;
         nwArr![m][idx] = capital + invBalance;
       }
