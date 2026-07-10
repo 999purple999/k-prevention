@@ -73,6 +73,10 @@ export function simulate(input: SimulationInput, opts: SimulateOptions = {}): Si
   const limite = tax.regime === 'forfettario' ? tax.forfettario?.limiteRicaviEUR ?? null : null;
   const sogliaUscita = tax.regime === 'forfettario' ? tax.forfettario?.sogliaUscitaImmediataEUR ?? null : null;
 
+  // Conto investimento opzionale: tasso mensile equivalente al rendimento annuo composto.
+  const inv = cfg.investmentAccount?.enabled ? cfg.investmentAccount : null;
+  const invMonthlyRate = inv ? Math.pow(1 + inv.annualReturnPct / 100, 1 / 12) - 1 : 0;
+
   const antithetic = mc.antitheticVariates !== false;
   let N = opts.iterationsOverride ?? mc.iterations;
   if (antithetic && N % 2 !== 0) N += 1;
@@ -89,6 +93,9 @@ export function simulate(input: SimulationInput, opts: SimulateOptions = {}): Si
   const taxPaidArr = Array.from({ length: horizon }, () => new Float64Array(totalTraj));
   const netArr = Array.from({ length: horizon }, () => new Float64Array(totalTraj));
   const probNeg = new Float64Array(horizon);
+  // Fondo investimento + patrimonio netto (allocati solo se il fondo è attivo).
+  const invArr = inv ? Array.from({ length: horizon }, () => new Float64Array(totalTraj)) : null;
+  const nwArr = inv ? Array.from({ length: horizon }, () => new Float64Array(totalTraj)) : null;
 
   const ruinFlags = new Uint8Array(totalTraj);
   const runwayArr = new Float64Array(totalTraj);
@@ -106,6 +113,7 @@ export function simulate(input: SimulationInput, opts: SimulateOptions = {}): Si
     const rExp = axisRng(mc.seed, pairIndex, 'expense', anti);
 
     let capital = cfg.initialCapital;
+    let invBalance = inv ? inv.initialBalance : 0;
     let ledger: Credit[] = [];
     let dropConsecutive = 0;
     let dropCarryDays = 0;
@@ -199,6 +207,16 @@ export function simulate(input: SimulationInput, opts: SimulateOptions = {}): Si
       const net = cashIn - expCash - unforeseen - taxPaid;
       capital += net;
 
+      // (12) conto investimento: il fondo cresce, poi si versa la quota mensile
+      // spostandola DALLA cassa (trasferimento: il patrimonio non cambia, ma la
+      // cassa cala e il fondo compone). La rovina resta misurata sulla sola cassa.
+      if (inv) {
+        invBalance = invBalance * (1 + invMonthlyRate) + inv.monthlyContribution;
+        capital -= inv.monthlyContribution;
+        invArr![m][idx] = invBalance;
+        nwArr![m][idx] = capital + invBalance;
+      }
+
       grossArr[m][idx] = grossAccrued;
       cashInArr[m][idx] = cashIn;
       expArr[m][idx] = expCash;
@@ -249,6 +267,8 @@ export function simulate(input: SimulationInput, opts: SimulateOptions = {}): Si
     taxPaid: taxPaidArr.map(percentileBlock),
     net: netArr.map(percentileBlock),
     cap: cap.map(percentileBlock),
+    inv: invArr ? invArr.map(percentileBlock) : null,
+    nw: nwArr ? nwArr.map(percentileBlock) : null,
   };
 
   const monthlyResults: MonthlyResult[] = [];
@@ -277,6 +297,8 @@ export function simulate(input: SimulationInput, opts: SimulateOptions = {}): Si
       taxesPaidCash: monthBlocks.taxPaid[m],
       netCashFlow: monthBlocks.net[m],
       cumulativeCapital: monthBlocks.cap[m],
+      investmentBalance: monthBlocks.inv ? monthBlocks.inv[m] : undefined,
+      netWorth: monthBlocks.nw ? monthBlocks.nw[m] : undefined,
       probabilityOfNegativeCapital: probNeg[m] / totalTraj,
       riskFlags: flags,
     });
@@ -285,10 +307,16 @@ export function simulate(input: SimulationInput, opts: SimulateOptions = {}): Si
   // capitale ad ogni orizzonte + campioni grezzi (per l'istogramma)
   const capitalAtHorizon: Record<string, PercentileBlock> = {};
   const capitalSamples: Record<string, number[]> = {};
+  const netWorthAtHorizon: Record<string, PercentileBlock> = {};
+  const netWorthSamples: Record<string, number[]> = {};
   for (const h of cfg.simulationHorizons) {
     const idx = Math.min(h, horizon) - 1;
     capitalAtHorizon[String(h)] = percentileBlock(cap[idx]);
     capitalSamples[String(h)] = Array.from(cap[idx]);
+    if (nwArr) {
+      netWorthAtHorizon[String(h)] = percentileBlock(nwArr[idx]);
+      netWorthSamples[String(h)] = Array.from(nwArr[idx]);
+    }
   }
 
   // mese peggiore (mediana più bassa)
@@ -335,6 +363,7 @@ export function simulate(input: SimulationInput, opts: SimulateOptions = {}): Si
       },
       worstMonthIndex,
       capitalAtHorizon,
+      netWorthAtHorizon: nwArr ? netWorthAtHorizon : undefined,
       outstandingReceivables: {
         p50: percentileSorted(outstandingSorted, 50),
         p90: percentileSorted(outstandingSorted, 90),
@@ -342,7 +371,7 @@ export function simulate(input: SimulationInput, opts: SimulateOptions = {}): Si
       activeFlags: [...activeFlags],
       convergence: { converged, standardErrorOfMedian: seMedian, iterationsUsed: totalTraj },
     },
-    samples: { capitalAtHorizon: capitalSamples },
+    samples: { capitalAtHorizon: capitalSamples, netWorthAtHorizon: nwArr ? netWorthSamples : undefined },
     meta: { horizon, iterations: totalTraj, seed: mc.seed, antithetic, warnings },
   };
 }

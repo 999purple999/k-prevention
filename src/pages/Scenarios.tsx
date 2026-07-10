@@ -8,12 +8,25 @@ import { modelFromData, inputFromModel, isScenarioModel, SCENARIO_TYPES, type Sc
 import { simulate } from '../engine/simulate.ts';
 import type { SimulationOutput } from '../engine/types.ts';
 import { Spinner } from '../components/ui.tsx';
-import { fmtEUR, fmtPct, fmtNum1 } from '../lib/format.ts';
+import { fmtEUR, fmtPct, fmtNum1, monthLabel } from '../lib/format.ts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { CHART, axisTick, CustomTooltip } from '../components/charts/theme.tsx';
 
 interface CompareCol {
   label: string;
   out: SimulationOutput;
 }
+
+const COMPARE_SEED = 20260101;
+const COMPARE_HORIZONS = [12, 60, 120, 240, 360];
+const COMPARE_WINDOWS = [
+  { label: '1 anno', months: 12 },
+  { label: '5 anni', months: 60 },
+  { label: '10 anni', months: 120 },
+  { label: '20 anni', months: 240 },
+  { label: '30 anni', months: 360 },
+];
+const SERIES_COLORS = ['#22cee9', '#f59e0b', '#a78bfa'];
 
 export function Scenarios() {
   const { data, save, scenariosRev, workspaces, activeWorkspace, isConsolidato } = useData();
@@ -23,6 +36,7 @@ export function Scenarios() {
   const [name, setName] = useState('');
   const [compare, setCompare] = useState<CompareCol[] | null>(null);
   const [compareSel, setCompareSel] = useState<string[]>([]);
+  const [compareWin, setCompareWin] = useState(60);
   const fileRef = useRef<HTMLInputElement>(null);
   const ws = workspaces.find((w) => w.id === activeWorkspace);
 
@@ -147,15 +161,30 @@ export function Scenarios() {
     }
   };
 
+  // Confronto: TUTTI gli scenari girano allo stesso orizzonte massimo E con lo STESSO seed,
+  // così le proiezioni sono davvero comparabili (le differenze vengono dal modello, non dal
+  // rumore Monte Carlo). Le finestre 1/5/10/20/30 anni sono fette dello stesso run.
   const runCompare = async () => {
     setBusy('compare');
     try {
-      const cols: CompareCol[] = [];
-      cols.push({ label: 'Attuale (workspace)', out: simulate(inputFromModel(modelFromData(data)), { iterationsOverride: 2000 }) });
+      const runOne = (model: ScenarioModel, label: string): CompareCol => {
+        const inp = inputFromModel(model);
+        return {
+          label,
+          out: simulate(
+            {
+              ...inp,
+              monteCarlo: { ...inp.monteCarlo, seed: COMPARE_SEED },
+              simulationConfig: { ...inp.simulationConfig, simulationHorizons: COMPARE_HORIZONS },
+            },
+            { iterationsOverride: 1500 },
+          ),
+        };
+      };
+      const cols: CompareCol[] = [runOne(modelFromData(data), 'Attuale (workspace)')];
       for (const id of compareSel) {
         const meta = list.find((s) => s.id === id);
-        const model = await getModel(id);
-        cols.push({ label: meta?.name ?? 'Scenario', out: simulate(inputFromModel(model), { iterationsOverride: 2000 }) });
+        cols.push(runOne(await getModel(id), meta?.name ?? 'Scenario'));
       }
       setCompare(cols);
     } finally {
@@ -218,7 +247,26 @@ export function Scenarios() {
               <button className="btn-primary !py-1 text-xs" onClick={runCompare} disabled={busy === 'compare'}>{busy === 'compare' ? <Spinner /> : null}Confronta</button>
             </div>
           </div>
-          {compare && <CompareTable cols={compare} />}
+          {compare && (
+            <>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs" style={{ color: 'rgb(var(--text-dim))' }}>Finestra temporale (stessa per tutti gli scenari):</span>
+                <div className="inline-flex overflow-hidden rounded-lg" style={{ border: '1px solid rgb(var(--border-strong))' }}>
+                  {COMPARE_WINDOWS.map((w) => (
+                    <button key={w.months} onClick={() => setCompareWin(w.months)} className="px-2.5 py-1 text-xs font-medium transition"
+                      style={compareWin === w.months ? { background: 'rgb(var(--accent))', color: '#04141a' } : { color: 'rgb(var(--text-dim))' }}>
+                      {w.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <CompareChart cols={compare} win={compareWin} />
+              <CompareTable cols={compare} h={compareWin} />
+              <p className="mt-2 text-[11px]" style={{ color: 'rgb(var(--text-dim))' }}>
+                Tutti gli scenari usano lo stesso seed e lo stesso run a 30 anni: le finestre sono fette dello stesso identico run, quindi comparabili. Se un scenario ha un conto investimento, la linea è il patrimonio netto (cassa + fondo).
+              </p>
+            </>
+          )}
         </div>
       )}
 
@@ -254,12 +302,55 @@ export function Scenarios() {
   );
 }
 
-function CompareTable({ cols }: { cols: CompareCol[] }) {
-  const h = 36;
+/** Sovrappone la mediana (patrimonio netto se c'è un fondo, altrimenti cassa) di ogni
+ *  scenario sullo STESSO asse temporale, tagliato alla finestra scelta. */
+function CompareChart({ cols, win }: { cols: CompareCol[]; win: number }) {
+  const anyFund = cols.some((c) => c.out.monthlyResults.some((m) => m.netWorth));
+  const n = Math.min(win, ...cols.map((c) => c.out.monthlyResults.length));
+  const rows: Record<string, number | string>[] = [];
+  for (let m = 0; m < n; m++) {
+    const row: Record<string, number | string> = { label: monthLabel(cols[0].out.monthlyResults[m].date) };
+    cols.forEach((c, i) => {
+      const mr = c.out.monthlyResults[m];
+      row[`s${i}`] = (anyFund && mr.netWorth ? mr.netWorth : mr.cumulativeCapital).p50;
+    });
+    rows.push(row);
+  }
+  return (
+    <div className="mt-3">
+      <div className="mb-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+        {cols.map((c, i) => (
+          <span key={i} className="flex items-center gap-1.5" style={{ color: 'rgb(var(--text-dim))' }}>
+            <span className="inline-block h-2 w-3 rounded-sm" style={{ background: SERIES_COLORS[i % SERIES_COLORS.length] }} />
+            {c.label}
+          </span>
+        ))}
+        <span className="ml-auto">{anyFund ? 'patrimonio netto (mediana)' : 'cassa (mediana)'}</span>
+      </div>
+      <div style={{ height: 260 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 4 }}>
+            <CartesianGrid stroke={CHART.grid} vertical={false} />
+            <XAxis dataKey="label" tick={axisTick} tickLine={false} axisLine={false} minTickGap={28} />
+            <YAxis tick={axisTick} tickLine={false} axisLine={false} width={64} tickFormatter={(v) => fmtEUR(v)} />
+            <Tooltip content={<CustomTooltip />} />
+            {cols.map((c, i) => (
+              <Line key={i} type="monotone" dataKey={`s${i}`} name={c.label} stroke={SERIES_COLORS[i % SERIES_COLORS.length]} strokeWidth={2.2} dot={false} isAnimationActive={false} />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
+function CompareTable({ cols, h }: { cols: CompareCol[]; h: number }) {
+  const nw = (o: SimulationOutput) => o.aggregateResult.netWorthAtHorizon?.[String(h)]?.p50;
   const rows: { label: string; get: (o: SimulationOutput) => string; best?: 'min' | 'max' }[] = [
     { label: 'Probabilità di rovina', get: (o) => fmtPct(o.aggregateResult.probabilityOfRuin), best: 'min' },
-    { label: `Capitale p50 · ${h}m`, get: (o) => fmtEUR(o.aggregateResult.capitalAtHorizon[String(h)]?.p50 ?? 0), best: 'max' },
-    { label: 'Capitale p10 · ' + h + 'm', get: (o) => fmtEUR(o.aggregateResult.capitalAtHorizon[String(h)]?.p10 ?? 0), best: 'max' },
+    { label: `Patrimonio netto p50 · ${h}m`, get: (o) => fmtEUR(nw(o) ?? o.aggregateResult.capitalAtHorizon[String(h)]?.p50 ?? 0), best: 'max' },
+    { label: `Cassa p50 · ${h}m`, get: (o) => fmtEUR(o.aggregateResult.capitalAtHorizon[String(h)]?.p50 ?? 0), best: 'max' },
+    { label: `Cassa p10 · ${h}m`, get: (o) => fmtEUR(o.aggregateResult.capitalAtHorizon[String(h)]?.p10 ?? 0), best: 'max' },
     { label: 'Autonomia mediana', get: (o) => `${fmtNum1(o.aggregateResult.expectedRunwayMonths.p50)} mesi`, best: 'max' },
     { label: 'Avvisi attivi', get: (o) => String(o.aggregateResult.activeFlags.length), best: 'min' },
   ];

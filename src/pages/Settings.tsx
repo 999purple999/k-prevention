@@ -3,6 +3,7 @@ import { useSession } from '../lib/session.tsx';
 import { useData } from '../lib/data.tsx';
 import { Spinner, EncryptionBadge } from '../components/ui.tsx';
 import { WorkspaceManager } from '../components/managers/WorkspaceManager.tsx';
+import { InvestmentManager } from '../components/managers/InvestmentManager.tsx';
 import { DEMO } from '../lib/demo.ts';
 
 export function Settings() {
@@ -63,6 +64,14 @@ export function Settings() {
           <div className="mt-4"><WorkspaceManager /></div>
         </section>
       )}
+
+      <section className="panel p-5">
+        <h2 className="text-sm font-semibold">Conto investimento</h2>
+        <p className="mt-1 text-xs" style={{ color: 'rgb(var(--text-dim))' }}>
+          Un fondo che compone nel tempo: ogni mese sposti una quota fissa dalla cassa al fondo. Utile per la proiezione a lungo termine (patrimonio netto). Fa parte di questo scenario/workspace.
+        </p>
+        <div className="mt-4"><InvestmentManager /></div>
+      </section>
 
       <section className="panel p-5">
         <h2 className="text-sm font-semibold">Cambia password</h2>

@@ -115,6 +115,18 @@ export interface MonteCarloConfig {
   antitheticVariates?: boolean;
 }
 
+/**
+ * Conto investimento opzionale: ogni mese si sposta `monthlyContribution` dalla cassa al
+ * fondo (la cassa cala, il patrimonio no: è un trasferimento) e il fondo cresce al tasso
+ * annuo dato. La rovina resta misurata sulla sola CASSA (il fondo non è liquidità corrente).
+ */
+export interface InvestmentAccount {
+  enabled: boolean;
+  initialBalance: number; // saldo di partenza del fondo (EUR)
+  monthlyContribution: number; // EUR/mese spostati dalla cassa al fondo
+  annualReturnPct: number; // rendimento annuo lordo % (es. 7)
+}
+
 export interface SimulationConfig {
   initialCapital: number;
   startDate: string;
@@ -124,6 +136,7 @@ export interface SimulationConfig {
   receivablesLedger?: boolean;
   ruinThresholdEUR: number;
   liquidityWarningMonths?: number;
+  investmentAccount?: InvestmentAccount | null;
 }
 
 export interface SimulationInput {
@@ -167,6 +180,10 @@ export interface MonthlyResult {
   taxesPaidCash: PercentileBlock;
   netCashFlow: PercentileBlock;
   cumulativeCapital: PercentileBlock;
+  /** Saldo del fondo investimento (presente solo se investmentAccount.enabled). */
+  investmentBalance?: PercentileBlock;
+  /** Patrimonio netto = cassa + fondo (presente solo se investmentAccount.enabled). */
+  netWorth?: PercentileBlock;
   probabilityOfNegativeCapital: number;
   riskFlags: RiskFlag[];
 }
@@ -176,6 +193,8 @@ export interface AggregateResult {
   expectedRunwayMonths: { p10: number; p50: number; p90: number };
   worstMonthIndex: number;
   capitalAtHorizon: Record<string, PercentileBlock>;
+  /** Patrimonio netto (cassa + fondo) a ciascun orizzonte, se il fondo è attivo. */
+  netWorthAtHorizon?: Record<string, PercentileBlock>;
   outstandingReceivables: { p50: number; p90: number };
   activeFlags: RiskFlag[];
   convergence: { converged: boolean; standardErrorOfMedian: number; iterationsUsed: number };
@@ -184,8 +203,8 @@ export interface AggregateResult {
 export interface SimulationOutput {
   monthlyResults: MonthlyResult[];
   aggregateResult: AggregateResult;
-  /** Campioni grezzi del capitale a ciascun orizzonte, per l'istogramma. */
-  samples: { capitalAtHorizon: Record<string, number[]> };
+  /** Campioni grezzi del capitale (e del patrimonio netto) a ciascun orizzonte, per l'istogramma. */
+  samples: { capitalAtHorizon: Record<string, number[]>; netWorthAtHorizon?: Record<string, number[]> };
   meta: {
     horizon: number;
     iterations: number;
