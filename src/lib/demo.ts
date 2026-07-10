@@ -23,6 +23,7 @@ export function demoUserData(): UserData {
     simulationConfig: ds.simulationConfig as UserData['simulationConfig'],
     monteCarlo: ds.monteCarlo as UserData['monteCarlo'],
     ledger: emptyLedger(),
+    goals: [],
   };
 }
 

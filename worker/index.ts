@@ -27,7 +27,7 @@ interface Env {
 }
 type Variables = { userId: string };
 
-const BASE_TYPES = ['incomeStreams', 'expenses', 'organicParameters', 'taxModel', 'simulationConfig', 'monteCarlo', 'profile', 'ledger'];
+const BASE_TYPES = ['incomeStreams', 'expenses', 'organicParameters', 'taxModel', 'simulationConfig', 'monteCarlo', 'profile', 'ledger', 'goals'];
 const DATA_TYPES = [...BASE_TYPES, 'workspaces'];
 const NS_RE = new RegExp(`^w_[a-z0-9]{1,16}_(${BASE_TYPES.join('|')})$`);
 // Multi-workspace: tipi base + `workspaces` (indice) + namespaced `w_<id>_<tipo>`.

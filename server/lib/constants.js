@@ -13,6 +13,7 @@ export const BASE_DATA_TYPES = [
   'monteCarlo',
   'profile',
   'ledger', // consuntivo: saldo reale + attuali per mese (rolling forecast)
+  'goals', // obiettivi personali + avvisi proattivi
 ];
 
 export const DATA_TYPES = [...BASE_DATA_TYPES, 'workspaces'];

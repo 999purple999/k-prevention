@@ -10,6 +10,7 @@ import { merge3 } from './merge.ts';
 import { useSession } from './session.tsx';
 import { DEMO, loadDemoData, saveDemoData } from './demo.ts';
 import { type Ledger, emptyLedger, anchorInput } from './ledger.ts';
+import type { Goal } from './goals.ts';
 import {
   type Workspace,
   DEFAULT_WORKSPACE,
@@ -47,11 +48,12 @@ export interface UserData {
   simulationConfig: SimulationConfig;
   monteCarlo: MonteCarloConfig;
   ledger: Ledger;
+  goals: Goal[];
 }
 
 export type DataType = keyof UserData;
 
-const DATA_TYPES: DataType[] = ['profile', 'incomeStreams', 'expenses', 'organicParameters', 'taxModel', 'simulationConfig', 'monteCarlo', 'ledger'];
+const DATA_TYPES: DataType[] = ['profile', 'incomeStreams', 'expenses', 'organicParameters', 'taxModel', 'simulationConfig', 'monteCarlo', 'ledger', 'goals'];
 const WS_INDEX_TYPE = 'workspaces';
 const ACTIVE_WS_KEY = 'kp_active_ws';
 
@@ -80,6 +82,7 @@ export function defaultUserData(name = 'Nuovo utente'): UserData {
     simulationConfig: { initialCapital: 10000, startDate: '2026-01-01', simulationHorizons: [12, 24, 36], ruinThresholdEUR: 1000, liquidityWarningMonths: 3 },
     monteCarlo: { iterations: 10000, seed: 20260101, percentiles: [5, 10, 25, 50, 75, 90, 95], convergenceCheck: { enabled: true, tolerance: 0.01 }, antitheticVariates: true },
     ledger: emptyLedger(),
+    goals: [],
   };
 }
 
@@ -209,6 +212,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           simulationConfig: await pick('simulationConfig', d.simulationConfig),
           monteCarlo: await pick('monteCarlo', d.monteCarlo),
           ledger: await pick('ledger', d.ledger),
+          goals: [],
         };
         return agg;
       })(),

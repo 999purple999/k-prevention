@@ -6,6 +6,7 @@ import { validateTaxModel } from '../engine/tax.ts';
 import { RiskPanel } from '../components/RiskPanel.tsx';
 import { SensitivityPanel } from '../components/SensitivityPanel.tsx';
 import { ReportButton } from '../components/ReportButton.tsx';
+import { GoalsPanel, GoalAlertBanner } from '../components/GoalsPanel.tsx';
 import { PlanVsActual } from '../components/PlanVsActual.tsx';
 import { FanChart } from '../components/charts/FanChart.tsx';
 import { CashflowBars } from '../components/charts/CashflowBars.tsx';
@@ -133,6 +134,7 @@ export function Dashboard() {
         </div>
       ) : out ? (
         <>
+          {!isConsolidato && <GoalAlertBanner output={out} />}
           <RiskPanel output={out} horizon={horizon} preview={preview} />
 
           {asOfMonth && <PlanVsActual month={asOfMonth} />}
@@ -178,8 +180,13 @@ export function Dashboard() {
         <div className="flex items-center justify-center gap-2 py-16 text-sm" style={{ color: 'rgb(var(--text-dim))' }}><Spinner /> Prima simulazione in corso…</div>
       )}
 
-      {/* Analisi di sensibilità */}
-      {data && !isConsolidato && !blocked.blocked && <SensitivityPanel />}
+      {/* Obiettivi + analisi di sensibilità */}
+      {data && !isConsolidato && !blocked.blocked && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {out && <GoalsPanel output={out} />}
+          <SensitivityPanel />
+        </div>
+      )}
 
       {/* Editors */}
       {data && !isConsolidato && (
