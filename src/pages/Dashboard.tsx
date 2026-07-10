@@ -4,6 +4,7 @@ import { useData } from '../lib/data.tsx';
 import { useSimulation } from '../hooks/useSimulation.ts';
 import { validateTaxModel } from '../engine/tax.ts';
 import { RiskPanel } from '../components/RiskPanel.tsx';
+import { PresetBar } from '../components/PresetBar.tsx';
 import { PlanVsActual } from '../components/PlanVsActual.tsx';
 import { FanChart } from '../components/charts/FanChart.tsx';
 import { CashflowBars } from '../components/charts/CashflowBars.tsx';
@@ -113,6 +114,8 @@ export function Dashboard() {
       </div>
 
       {error && <div className="rounded-lg px-3 py-2 text-sm" style={{ background: 'rgb(239 68 68 / 0.12)', color: '#fca5a5' }}>{error}</div>}
+
+      {data && <PresetBar />}
 
       {blocked.blocked ? (
         <div className="panel p-8 text-center">
