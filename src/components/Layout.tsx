@@ -89,7 +89,9 @@ export function Layout({ children }: { children: ReactNode }) {
       {DEMO && (
         <div className="mx-auto mt-4 max-w-7xl px-4 sm:px-6">
           <div className="rounded-xl px-4 py-2.5 text-center text-xs sm:text-left" style={{ background: 'rgb(var(--accent) / 0.08)', border: '1px solid rgb(var(--accent) / 0.25)', color: 'rgb(var(--text-dim))' }}>
-            <strong style={{ color: 'rgb(var(--accent))' }}>Demo pubblica</strong> · dati di esempio, tutto gira nel tuo browser (nessun backend). La versione completa gira su Cloudflare con cifratura end-to-end e account reali.
+            <strong style={{ color: 'rgb(var(--accent))' }}>Demo pubblica</strong> · dati di esempio, tutto gira nel tuo browser (nessun backend).{' '}
+            <a href="https://k-prevention.accessisoftwarefrancesco.workers.dev" target="_blank" rel="noreferrer" className="font-semibold underline" style={{ color: 'rgb(var(--accent))' }}>→ Apri l'app completa</a>{' '}
+            (Cloudflare, cifrata end-to-end, crea il tuo account).
           </div>
         </div>
       )}

@@ -38,7 +38,8 @@ export function MobileLayout({ children }: { children: ReactNode }) {
       {DEMO && (
         <div className="px-4 pt-3">
           <div className="rounded-xl px-3 py-2 text-center text-xs" style={{ background: 'rgb(var(--accent) / 0.08)', border: '1px solid rgb(var(--accent) / 0.25)', color: 'rgb(var(--text-dim))' }}>
-            <strong style={{ color: 'rgb(var(--accent))' }}>Demo</strong> · dati d'esempio, nessun backend.
+            <strong style={{ color: 'rgb(var(--accent))' }}>Demo</strong> · dati d'esempio.{' '}
+            <a href="https://k-prevention.accessisoftwarefrancesco.workers.dev" target="_blank" rel="noreferrer" className="font-semibold underline" style={{ color: 'rgb(var(--accent))' }}>App completa →</a>
           </div>
         </div>
       )}
