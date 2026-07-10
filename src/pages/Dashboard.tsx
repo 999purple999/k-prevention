@@ -5,6 +5,7 @@ import { useSimulation } from '../hooks/useSimulation.ts';
 import { validateTaxModel } from '../engine/tax.ts';
 import { RiskPanel } from '../components/RiskPanel.tsx';
 import { SensitivityPanel } from '../components/SensitivityPanel.tsx';
+import { ReportButton } from '../components/ReportButton.tsx';
 import { PlanVsActual } from '../components/PlanVsActual.tsx';
 import { FanChart } from '../components/charts/FanChart.tsx';
 import { CashflowBars } from '../components/charts/CashflowBars.tsx';
@@ -106,6 +107,7 @@ export function Dashboard() {
               </button>
             ))}
           </div>
+          {out && !isConsolidato && <ReportButton output={out} horizon={horizon} />}
           <button className="btn-primary" disabled={blocked.blocked || sim.running} onClick={() => input && sim.run(input, 'full')}>
             {sim.running && !preview ? <Spinner /> : null}
             Simula
