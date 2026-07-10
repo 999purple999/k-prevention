@@ -1,11 +1,22 @@
 /** Contesto dei dati utente: carica e decifra i blob, mantiene lo stato tipizzato,
- *  ripersiste ogni modifica (cifrandola). Il server vede solo blob opachi. */
+ *  ripersiste ogni modifica (cifrandola). Il server vede solo blob opachi.
+ *
+ *  Multi-workspace: le mappe interne (versioni, basi, coda) sono chiavizzate per tipo
+ *  COMPLETO sul server (`w_<id>_<tipo>` o nudo per il default), così i workspace non
+ *  collidono mai. `UserData` contiene sempre il workspace ATTIVO, per tipo base. */
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { api, ApiError } from './api.ts';
 import { merge3 } from './merge.ts';
 import { useSession } from './session.tsx';
 import { DEMO, loadDemoData, saveDemoData } from './demo.ts';
 import { type Ledger, emptyLedger, anchorInput } from './ledger.ts';
+import {
+  type Workspace,
+  DEFAULT_WORKSPACE,
+  CONSOLIDATO_ID,
+  typeForWs,
+  baseTypeForWs,
+} from './workspaces.ts';
 import type {
   IncomeStream,
   Expense,
@@ -40,6 +51,8 @@ export interface UserData {
 export type DataType = keyof UserData;
 
 const DATA_TYPES: DataType[] = ['profile', 'incomeStreams', 'expenses', 'organicParameters', 'taxModel', 'simulationConfig', 'monteCarlo', 'ledger'];
+const WS_INDEX_TYPE = 'workspaces';
+const ACTIVE_WS_KEY = 'kp_active_ws';
 
 export function defaultUserData(name = 'Nuovo utente'): UserData {
   return {
@@ -73,11 +86,19 @@ interface DataContextValue {
   data: UserData | null;
   loading: boolean;
   error: string | null;
-  savingType: DataType | null;
+  savingType: string | null;
   online: boolean;
   syncing: boolean;
-  /** Contatore che aumenta quando gli scenari cambiano su un altro dispositivo. */
   scenariosRev: number;
+  // multi-workspace
+  workspaces: Workspace[];
+  activeWorkspace: string;
+  isConsolidato: boolean;
+  readOnly: boolean;
+  switchWorkspace: (id: string) => void;
+  createWorkspace: (name: string, kind: Workspace['kind']) => Promise<string>;
+  renameWorkspace: (id: string, name: string) => Promise<void>;
+  deleteWorkspace: (id: string) => Promise<void>;
   reload: () => Promise<void>;
   save: <K extends DataType>(type: K, value: UserData[K]) => Promise<void>;
   buildSimulationInput: () => SimulationInput | null;
@@ -90,17 +111,108 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savingType, setSavingType] = useState<DataType | null>(null);
+  const [savingType, setSavingType] = useState<string | null>(null);
   const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
   const [syncing, setSyncing] = useState(false);
   const [scenariosRev, setScenariosRev] = useState(0);
+
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([DEFAULT_WORKSPACE]);
+  const [activeWorkspace, setActiveWorkspace] = useState<string>(() => (DEMO ? 'default' : localStorage.getItem(ACTIVE_WS_KEY) || 'default'));
+  const activeRef = useRef(activeWorkspace);
+  activeRef.current = activeWorkspace;
+  const isConsolidato = activeWorkspace === CONSOLIDATO_ID;
+  const readOnly = isConsolidato;
+
   const loadedFor = useRef<string | null>(null);
-  const versions = useRef<Partial<Record<DataType, number>>>({}); // ultima versione sincronizzata
-  const bases = useRef<Partial<Record<DataType, unknown>>>({}); // valore base per il merge 3-vie
+  const versions = useRef<Record<string, number>>({}); // per FULL type
+  const bases = useRef<Record<string, unknown>>({}); // valore base per merge 3-vie, per FULL type
+  const wsVersion = useRef<number | undefined>(undefined);
   const OFFLINE_KEY = 'kp_offline_queue';
 
-  const timers = useRef<Partial<Record<DataType, ReturnType<typeof setTimeout>>>>({});
-  const pending = useRef<Partial<Record<DataType, unknown>>>({});
+  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({}); // per FULL type
+  const pending = useRef<Record<string, { baseType: DataType; value: unknown }>>({}); // per FULL type
+
+  const prefix = useCallback((baseType: DataType) => typeForWs(activeRef.current, baseType), []);
+
+  // ---- caricamento ----
+  const decryptBlob = useCallback(
+    async (fullType: string, encryptedBlob: string, iv: string) => decryptFor(fullType, encryptedBlob, iv),
+    [decryptFor],
+  );
+
+  const loadWorkspaceData = useCallback(
+    (blobs: { dataType: string; encryptedBlob: string; iv: string; lastModified: number }[], wsId: string) =>
+      (async () => {
+        const base = defaultUserData();
+        const next: Partial<UserData> = {};
+        for (const bt of DATA_TYPES) {
+          const full = typeForWs(wsId, bt);
+          const b = blobs.find((x) => x.dataType === full);
+          if (!b) continue;
+          try {
+            const val = await decryptBlob(full, b.encryptedBlob, b.iv);
+            next[bt] = val as never;
+            versions.current[full] = b.lastModified;
+            bases.current[full] = val;
+          } catch {
+            setError('Impossibile decifrare alcuni dati (chiave errata?).');
+          }
+        }
+        return { ...base, ...next } as UserData;
+      })(),
+    [decryptBlob],
+  );
+
+  const buildConsolidato = useCallback(
+    (blobs: { dataType: string; encryptedBlob: string; iv: string; lastModified: number }[], wsList: Workspace[]) =>
+      (async () => {
+        const incomeStreams: IncomeStream[] = [];
+        const expenses: Expense[] = [];
+        for (const w of wsList) {
+          const incFull = typeForWs(w.id, 'incomeStreams');
+          const expFull = typeForWs(w.id, 'expenses');
+          const incBlob = blobs.find((x) => x.dataType === incFull);
+          const expBlob = blobs.find((x) => x.dataType === expFull);
+          try {
+            if (incBlob) {
+              const inc = (await decryptBlob(incFull, incBlob.encryptedBlob, incBlob.iv)) as IncomeStream[];
+              for (const s of inc) incomeStreams.push({ ...s, id: `${w.id}__${s.id}`, name: `${s.name} · ${w.name}` });
+            }
+            if (expBlob) {
+              const exp = (await decryptBlob(expFull, expBlob.encryptedBlob, expBlob.iv)) as Expense[];
+              for (const e of exp) expenses.push({ ...e, id: `${w.id}__${e.id}`, name: `${e.name} · ${w.name}` });
+            }
+          } catch {
+            /* salta workspace non decifrabile */
+          }
+        }
+        // Assunzioni (organic/fisco/config/mc) dal workspace di default: la vista è un
+        // overview di cassa aggregato. Il fisco combinato è approssimato (vedi UI).
+        const defFull = (bt: DataType) => typeForWs('default', bt);
+        const pick = async <T,>(bt: DataType, fallback: T): Promise<T> => {
+          const b = blobs.find((x) => x.dataType === defFull(bt));
+          if (!b) return fallback;
+          try {
+            return (await decryptBlob(defFull(bt), b.encryptedBlob, b.iv)) as T;
+          } catch {
+            return fallback;
+          }
+        };
+        const d = defaultUserData('Consolidato');
+        const agg: UserData = {
+          profile: { name: 'Consolidato' },
+          incomeStreams,
+          expenses,
+          organicParameters: await pick('organicParameters', d.organicParameters),
+          taxModel: await pick('taxModel', d.taxModel),
+          simulationConfig: await pick('simulationConfig', d.simulationConfig),
+          monteCarlo: await pick('monteCarlo', d.monteCarlo),
+          ledger: await pick('ledger', d.ledger),
+        };
+        return agg;
+      })(),
+    [decryptBlob],
+  );
 
   const reload = useCallback(async () => {
     if (!isUnlocked) return;
@@ -112,29 +224,38 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const blobs = await api.getAllData();
-      const base = defaultUserData();
-      const next: Partial<UserData> = {};
-      for (const b of blobs) {
-        if (!DATA_TYPES.includes(b.dataType as DataType)) continue;
+      // indice workspace
+      const wsBlob = blobs.find((b) => b.dataType === WS_INDEX_TYPE);
+      let wsList: Workspace[] = [DEFAULT_WORKSPACE];
+      if (wsBlob) {
         try {
-          const val = await decryptFor(b.dataType, b.encryptedBlob, b.iv);
-          next[b.dataType as DataType] = val as never;
-          versions.current[b.dataType as DataType] = b.lastModified;
-          bases.current[b.dataType as DataType] = val;
+          const list = (await decryptBlob(WS_INDEX_TYPE, wsBlob.encryptedBlob, wsBlob.iv)) as Workspace[];
+          wsList = list.some((w) => w.id === 'default') ? list : [DEFAULT_WORKSPACE, ...list];
+          wsVersion.current = wsBlob.lastModified;
         } catch {
-          setError('Impossibile decifrare alcuni dati (chiave errata?).');
+          /* usa default */
         }
       }
-      setData({ ...base, ...next } as UserData);
+      setWorkspaces(wsList);
+      const active = activeRef.current;
+      if (active === CONSOLIDATO_ID) {
+        setData(await buildConsolidato(blobs, wsList));
+      } else {
+        const exists = wsList.some((w) => w.id === active) || active === 'default';
+        const targetWs = exists ? active : 'default';
+        if (!exists) setActiveWorkspace('default');
+        setData(await loadWorkspaceData(blobs, targetWs));
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Errore di caricamento');
     } finally {
       setLoading(false);
     }
-  }, [isUnlocked, decryptFor]);
+  }, [isUnlocked, decryptBlob, loadWorkspaceData, buildConsolidato]);
 
-  // ---- coda offline (blob cifrati, E2E-safe a riposo) ----
-  const readQueue = (): { type: DataType; ciphertext: string; iv: string; baseVersion: number }[] => {
+  // ---- coda offline (blob cifrati, per FULL type) ----
+  interface QueueEntry { full: string; baseType: DataType; ciphertext: string; iv: string; baseVersion: number }
+  const readQueue = (): QueueEntry[] => {
     try {
       return JSON.parse(localStorage.getItem(OFFLINE_KEY) || '[]');
     } catch {
@@ -142,63 +263,60 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
   const writeQueue = (q: unknown[]) => localStorage.setItem(OFFLINE_KEY, JSON.stringify(q));
-  const enqueueOffline = (e: { type: DataType; ciphertext: string; iv: string; baseVersion: number }) =>
-    writeQueue([...readQueue().filter((x) => x.type !== e.type), e]);
-  const dequeueOffline = (type: DataType) => writeQueue(readQueue().filter((x) => x.type !== type));
+  const enqueueOffline = (e: QueueEntry) => writeQueue([...readQueue().filter((x) => x.full !== e.full), e]);
+  const dequeueOffline = (full: string) => writeQueue(readQueue().filter((x) => x.full !== full));
 
   const persist = useCallback(
-    async (type: DataType, value: unknown) => {
-      setSavingType(type);
+    async (full: string, baseType: DataType, value: unknown) => {
+      setSavingType(full);
       try {
-        const { ciphertext, iv } = await encryptFor(type, value);
-        const baseVersion = versions.current[type];
+        const { ciphertext, iv } = await encryptFor(full, value);
+        const baseVersion = versions.current[full];
         try {
-          const res = await api.putData(type, ciphertext, iv, baseVersion);
-          versions.current[type] = res.lastModified;
-          bases.current[type] = value;
-          dequeueOffline(type);
+          const res = await api.putData(full, ciphertext, iv, baseVersion);
+          versions.current[full] = res.lastModified;
+          bases.current[full] = value;
+          dequeueOffline(full);
         } catch (e) {
           if (e instanceof ApiError && e.status === 409) {
-            // Conflitto: prendi il server, mergia a 3 vie, riprova con la versione corrente.
             const cur = (e.body as { current?: { encryptedBlob: string; iv: string; lastModified: number } })?.current;
             if (cur) {
-              const serverVal = await decryptFor(type, cur.encryptedBlob, cur.iv);
-              const merged = merge3(type, bases.current[type], value, serverVal);
-              setData((d) => (d ? { ...d, [type]: merged } : d));
-              const enc2 = await encryptFor(type, merged);
-              const res2 = await api.putData(type, enc2.ciphertext, enc2.iv, cur.lastModified);
-              versions.current[type] = res2.lastModified;
-              bases.current[type] = merged;
-              dequeueOffline(type);
+              const serverVal = await decryptFor(full, cur.encryptedBlob, cur.iv);
+              const merged = merge3(baseType, bases.current[full], value, serverVal);
+              if (baseTypeForWs(activeRef.current, full, DATA_TYPES)) setData((d) => (d ? { ...d, [baseType]: merged } : d));
+              const enc2 = await encryptFor(full, merged);
+              const res2 = await api.putData(full, enc2.ciphertext, enc2.iv, cur.lastModified);
+              versions.current[full] = res2.lastModified;
+              bases.current[full] = merged;
+              dequeueOffline(full);
             }
           } else if (e instanceof ApiError) {
-            throw e; // errore server reale
+            throw e;
           } else {
-            // errore di rete → offline: accoda per la riconnessione
-            enqueueOffline({ type, ciphertext, iv, baseVersion: baseVersion ?? 0 });
+            enqueueOffline({ full, baseType, ciphertext, iv, baseVersion: baseVersion ?? 0 });
             setOnline(false);
           }
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Salvataggio fallito');
       } finally {
-        setSavingType((s) => (s === type ? null : s));
+        setSavingType((s) => (s === full ? null : s));
       }
     },
     [encryptFor, decryptFor],
   );
 
-  /** Applica una modifica remota (SSE/polling) se più recente e senza una modifica locale in corso. */
   const applyRemoteChange = useCallback(
-    async (type: DataType) => {
-      if (pending.current[type] !== undefined || timers.current[type]) return; // sto editando quel tipo
+    async (full: string) => {
+      if (pending.current[full] !== undefined || timers.current[full]) return;
       try {
-        const row = await api.getData(type);
-        if (versions.current[type] && row.lastModified <= versions.current[type]!) return;
-        const val = await decryptFor(type, row.encryptedBlob, row.iv);
-        versions.current[type] = row.lastModified;
-        bases.current[type] = val;
-        setData((d) => (d ? { ...d, [type]: val } : d));
+        const row = await api.getData(full);
+        if (versions.current[full] && row.lastModified <= versions.current[full]) return;
+        const val = await decryptFor(full, row.encryptedBlob, row.iv);
+        versions.current[full] = row.lastModified;
+        bases.current[full] = val;
+        const bare = baseTypeForWs(activeRef.current, full, DATA_TYPES);
+        if (bare) setData((d) => (d ? { ...d, [bare]: val } : d));
       } catch {
         /* 404 = eliminato altrove; ignora */
       }
@@ -212,18 +330,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setSyncing(true);
     for (const entry of q) {
       try {
-        const res = await api.putData(entry.type, entry.ciphertext, entry.iv, entry.baseVersion);
-        versions.current[entry.type] = res.lastModified;
-        dequeueOffline(entry.type);
+        const res = await api.putData(entry.full, entry.ciphertext, entry.iv, entry.baseVersion);
+        versions.current[entry.full] = res.lastModified;
+        dequeueOffline(entry.full);
       } catch (e) {
         if (e instanceof ApiError && e.status === 409) {
-          dequeueOffline(entry.type);
-          setData((d) => {
-            if (d && entry.type in d) void persist(entry.type, (d as unknown as Record<string, unknown>)[entry.type]);
-            return d;
-          });
+          dequeueOffline(entry.full);
+          const bare = baseTypeForWs(activeRef.current, entry.full, DATA_TYPES) as DataType | null;
+          if (bare) setData((d) => { if (d) void persist(entry.full, bare, (d as unknown as Record<string, unknown>)[bare]); return d; });
         }
-        // altri errori: lascia in coda per il prossimo online
       }
     }
     setSyncing(false);
@@ -242,20 +357,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, [isUnlocked, userId, reload, flushOffline]);
 
-  // Sincronizzazione push (SSE) + polling di fallback su focus/intervallo.
+  // Sincronizzazione push (SSE) + polling di fallback.
   useEffect(() => {
     if (!isUnlocked || DEMO) return;
+    const handle = (type: string, lastModified?: number) => {
+      if (type === 'simulations') { setScenariosRev((r) => r + 1); return; }
+      if (type === WS_INDEX_TYPE) { if (!wsVersion.current || (lastModified ?? Infinity) > wsVersion.current) void reload(); return; }
+      if (activeRef.current === CONSOLIDATO_ID) { void reload(); return; }
+      if (baseTypeForWs(activeRef.current, type, DATA_TYPES) && (!versions.current[type] || (lastModified ?? Infinity) > versions.current[type])) {
+        void applyRemoteChange(type);
+      }
+    };
     const es = new EventSource('/api/sync/stream', { withCredentials: true });
     es.onmessage = (ev) => {
       try {
         const { type, lastModified } = JSON.parse(ev.data);
-        if (type === 'simulations') {
-          setScenariosRev((r) => r + 1);
-          return;
-        }
-        if ((DATA_TYPES as readonly string[]).includes(type) && (!versions.current[type as DataType] || lastModified > versions.current[type as DataType]!)) {
-          void applyRemoteChange(type as DataType);
-        }
+        handle(type, lastModified);
       } catch {
         /* ignore */
       }
@@ -263,11 +380,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const poll = async () => {
       try {
         const vs = await api.getVersions();
-        for (const { dataType, lastModified } of vs) {
-          if ((DATA_TYPES as readonly string[]).includes(dataType) && (!versions.current[dataType as DataType] || lastModified > versions.current[dataType as DataType]!)) {
-            void applyRemoteChange(dataType as DataType);
-          }
-        }
+        for (const { dataType, lastModified } of vs) handle(dataType, lastModified);
       } catch {
         /* ignore */
       }
@@ -282,63 +395,51 @@ export function DataProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('focus', poll);
     };
-  }, [isUnlocked, applyRemoteChange]);
+  }, [isUnlocked, applyRemoteChange, reload]);
 
-  // Stato online/offline + flush della coda alla riconnessione.
+  // Stato online/offline.
   useEffect(() => {
-    const onOnline = () => {
-      setOnline(true);
-      void flushOffline();
-    };
+    const onOnline = () => { setOnline(true); void flushOffline(); };
     const onOffline = () => setOnline(false);
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
-    return () => {
-      window.removeEventListener('online', onOnline);
-      window.removeEventListener('offline', onOffline);
-    };
+    return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
   }, [flushOffline]);
 
   const save = useCallback(
     async <K extends DataType>(type: K, value: UserData[K]) => {
-      // Aggiorna subito lo stato locale; ripersiste (cifrando) con debounce per tipo.
+      if (readOnly) return; // il consolidato è di sola lettura
       setData((d) => {
         const next = d ? { ...d, [type]: value } : d;
         if (DEMO && next) saveDemoData(next);
         return next;
       });
-      if (DEMO) return; // in demo si persiste solo in localStorage
-      pending.current[type] = value;
-      if (timers.current[type]) clearTimeout(timers.current[type]);
-      timers.current[type] = setTimeout(() => {
-        delete timers.current[type];
-        const v = pending.current[type];
-        delete pending.current[type];
-        void persist(type, v);
+      if (DEMO) return;
+      const full = prefix(type);
+      pending.current[full] = { baseType: type, value };
+      if (timers.current[full]) clearTimeout(timers.current[full]);
+      timers.current[full] = setTimeout(() => {
+        delete timers.current[full];
+        const p = pending.current[full];
+        delete pending.current[full];
+        if (p) void persist(full, p.baseType, p.value);
       }, 600);
     },
-    [persist],
+    [persist, prefix, readOnly],
   );
 
-  // Flush dei salvataggi in sospeso quando la tab passa in background o si smonta:
-  // così una modifica seguita da chiusura/cambio-scheda non viene persa nel debounce.
   const flushPending = useCallback(() => {
-    for (const type of Object.keys(pending.current) as DataType[]) {
-      const t = timers.current[type];
-      if (t) {
-        clearTimeout(t);
-        delete timers.current[type];
-      }
-      const v = pending.current[type];
-      delete pending.current[type];
-      void persist(type, v);
+    for (const full of Object.keys(pending.current)) {
+      const t = timers.current[full];
+      if (t) { clearTimeout(t); delete timers.current[full]; }
+      const p = pending.current[full];
+      delete pending.current[full];
+      if (p) void persist(full, p.baseType, p.value);
     }
   }, [persist]);
 
   useEffect(() => {
-    const onHide = () => {
-      if (document.visibilityState === 'hidden') flushPending();
-    };
+    const onHide = () => { if (document.visibilityState === 'hidden') flushPending(); };
     document.addEventListener('visibilitychange', onHide);
     window.addEventListener('beforeunload', flushPending);
     return () => {
@@ -347,6 +448,62 @@ export function DataProvider({ children }: { children: ReactNode }) {
       flushPending();
     };
   }, [flushPending]);
+
+  // ---- gestione workspace ----
+  const persistWorkspaces = useCallback(
+    async (list: Workspace[]) => {
+      if (DEMO) return; // la demo ha un solo workspace
+      const { ciphertext, iv } = await encryptFor(WS_INDEX_TYPE, list);
+      const res = await api.putData(WS_INDEX_TYPE, ciphertext, iv, wsVersion.current);
+      wsVersion.current = res.lastModified;
+    },
+    [encryptFor],
+  );
+
+  const switchWorkspace = useCallback((id: string) => {
+    flushPending();
+    localStorage.setItem(ACTIVE_WS_KEY, id);
+    setActiveWorkspace(id);
+    activeRef.current = id;
+    void reload();
+  }, [flushPending, reload]);
+
+  const createWorkspace = useCallback(
+    async (name: string, kind: Workspace['kind']) => {
+      const { newWorkspaceId } = await import('./workspaces.ts');
+      const id = newWorkspaceId();
+      const list = [...workspaces, { id, name: name.trim() || 'Nuovo workspace', kind }];
+      setWorkspaces(list);
+      await persistWorkspaces(list);
+      switchWorkspace(id);
+      return id;
+    },
+    [workspaces, persistWorkspaces, switchWorkspace],
+  );
+
+  const renameWorkspace = useCallback(
+    async (id: string, name: string) => {
+      const list = workspaces.map((w) => (w.id === id ? { ...w, name: name.trim() || w.name } : w));
+      setWorkspaces(list);
+      await persistWorkspaces(list);
+    },
+    [workspaces, persistWorkspaces],
+  );
+
+  const deleteWorkspace = useCallback(
+    async (id: string) => {
+      if (id === 'default') return;
+      const list = workspaces.filter((w) => w.id !== id);
+      setWorkspaces(list);
+      await persistWorkspaces(list);
+      // cancella i blob del workspace
+      for (const bt of DATA_TYPES) {
+        try { await api.deleteData(typeForWs(id, bt)); } catch { /* ignore */ }
+      }
+      if (activeRef.current === id) switchWorkspace('default');
+    },
+    [workspaces, persistWorkspaces, switchWorkspace],
+  );
 
   const buildSimulationInput = useCallback((): SimulationInput | null => {
     if (!data) return null;
@@ -358,12 +515,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
       taxModel: data.taxModel,
       monteCarlo: data.monteCarlo,
     };
-    // Ri-àncora la proiezione al saldo reale / mese corrente del consuntivo, se impostati.
     return anchorInput(base, data.ledger);
   }, [data]);
 
   return (
-    <Ctx.Provider value={{ data, loading, error, savingType, online, syncing, scenariosRev, reload, save, buildSimulationInput }}>
+    <Ctx.Provider
+      value={{
+        data, loading, error, savingType, online, syncing, scenariosRev,
+        workspaces, activeWorkspace, isConsolidato, readOnly,
+        switchWorkspace, createWorkspace, renameWorkspace, deleteWorkspace,
+        reload, save, buildSimulationInput,
+      }}
+    >
       {children}
     </Ctx.Provider>
   );

@@ -5,6 +5,7 @@ import { useData } from '../lib/data.tsx';
 import { Logo, ThemeToggle, EncryptionBadge } from './ui.tsx';
 import { SyncBadge } from './SyncBadge.tsx';
 import { InstallPrompt } from './InstallPrompt.tsx';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher.tsx';
 import { DEMO } from '../lib/demo.ts';
 
 const nav = [
@@ -27,7 +28,8 @@ export function Layout({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-20 border-b backdrop-blur-md" style={{ borderColor: 'rgb(var(--border))', background: 'rgb(var(--bg) / 0.72)' }}>
         <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 sm:px-6">
           <Logo />
-          <nav className="ml-4 hidden items-center gap-1 md:flex">
+          <div className="ml-1"><WorkspaceSwitcher /></div>
+          <nav className="ml-2 hidden items-center gap-1 md:flex">
             {nav.map((n) => (
               <NavLink
                 key={n.to}
@@ -87,7 +89,7 @@ export function Layout({ children }: { children: ReactNode }) {
       {DEMO && (
         <div className="mx-auto mt-4 max-w-7xl px-4 sm:px-6">
           <div className="rounded-xl px-4 py-2.5 text-center text-xs sm:text-left" style={{ background: 'rgb(var(--accent) / 0.08)', border: '1px solid rgb(var(--accent) / 0.25)', color: 'rgb(var(--text-dim))' }}>
-            <strong style={{ color: 'rgb(var(--accent))' }}>Demo pubblica</strong> · dati di esempio, tutto gira nel tuo browser (nessun backend). La versione completa gira su Google Cloud Run con cifratura end-to-end e account reali.
+            <strong style={{ color: 'rgb(var(--accent))' }}>Demo pubblica</strong> · dati di esempio, tutto gira nel tuo browser (nessun backend). La versione completa gira su Cloudflare con cifratura end-to-end e account reali.
           </div>
         </div>
       )}

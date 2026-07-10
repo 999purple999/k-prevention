@@ -5,6 +5,7 @@ import { useData } from '../lib/data.tsx';
 import { Logo, ThemeToggle } from './ui.tsx';
 import { SyncBadge } from './SyncBadge.tsx';
 import { InstallPrompt } from './InstallPrompt.tsx';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher.tsx';
 import { DEMO } from '../lib/demo.ts';
 
 const tabs = [
@@ -23,12 +24,13 @@ export function MobileLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-full pb-20">
       <header className="sticky top-0 z-20 border-b backdrop-blur-md" style={{ borderColor: 'rgb(var(--border))', background: 'rgb(var(--bg) / 0.8)' }}>
-        <div className="flex h-14 items-center gap-3 px-4">
+        <div className="flex h-14 items-center gap-2 px-3">
           <Logo />
-          <div className="ml-auto flex items-center gap-2">
+          <WorkspaceSwitcher />
+          <div className="ml-auto flex items-center gap-1.5">
             <SyncBadge />
             <ThemeToggle />
-            <button className="btn-ghost h-9 !px-3 text-xs" onClick={async () => { await logout(); navigate('/login'); }}>Esci</button>
+            <button className="btn-ghost h-9 !px-2.5 text-xs" onClick={async () => { await logout(); navigate('/login'); }}>Esci</button>
           </div>
         </div>
       </header>

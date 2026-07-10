@@ -27,7 +27,7 @@ const TABS = [
 ] as const;
 
 export function Dashboard() {
-  const { data, loading, error, save, buildSimulationInput } = useData();
+  const { data, loading, error, save, buildSimulationInput, isConsolidato } = useData();
   const sim = useSimulation();
   const [horizon, setHorizon] = useState(36);
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('redditi');
@@ -115,7 +115,14 @@ export function Dashboard() {
 
       {error && <div className="rounded-lg px-3 py-2 text-sm" style={{ background: 'rgb(239 68 68 / 0.12)', color: '#fca5a5' }}>{error}</div>}
 
-      {data && <PresetBar />}
+      {isConsolidato && (
+        <div className="rounded-xl px-4 py-2.5 text-sm" style={{ background: 'rgb(var(--accent) / 0.08)', border: '1px solid rgb(var(--accent) / 0.25)', color: 'rgb(var(--text-dim))' }}>
+          <strong style={{ color: 'rgb(var(--accent))' }}>Vista consolidata</strong> · redditi e spese di tutti i tuoi workspace insieme, in sola lettura.
+          Il modello fiscale è quello del workspace «Personale»: il fisco combinato tra regimi diversi è un'approssimazione, usa la vista per l'overview di cassa.
+        </div>
+      )}
+
+      {data && !isConsolidato && <PresetBar />}
 
       {blocked.blocked ? (
         <div className="panel p-8 text-center">
@@ -172,7 +179,7 @@ export function Dashboard() {
       )}
 
       {/* Editors */}
-      {data && (
+      {data && !isConsolidato && (
         <div className="panel p-4 sm:p-5">
           <div className="mb-4 flex flex-wrap gap-1.5">
             {TABS.map((t) => (

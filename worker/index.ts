@@ -27,8 +27,11 @@ interface Env {
 }
 type Variables = { userId: string };
 
-const DATA_TYPES = ['incomeStreams', 'expenses', 'organicParameters', 'taxModel', 'simulationConfig', 'monteCarlo', 'profile', 'ledger'];
-const isValidType = (t: string) => DATA_TYPES.includes(t);
+const BASE_TYPES = ['incomeStreams', 'expenses', 'organicParameters', 'taxModel', 'simulationConfig', 'monteCarlo', 'profile', 'ledger'];
+const DATA_TYPES = [...BASE_TYPES, 'workspaces'];
+const NS_RE = new RegExp(`^w_[a-z0-9]{1,16}_(${BASE_TYPES.join('|')})$`);
+// Multi-workspace: tipi base + `workspaces` (indice) + namespaced `w_<id>_<tipo>`.
+const isValidType = (t: string) => DATA_TYPES.includes(t) || NS_RE.test(t);
 
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
