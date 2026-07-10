@@ -15,10 +15,10 @@ const FLAG_INFO: Record<RiskFlag, { label: string; desc: string; tone: 'warn' | 
 };
 
 function ruinTone(p: number) {
-  if (p < 0.05) return { color: '#34d399', bg: 'rgb(16 185 129 / 0.10)', border: 'rgb(16 185 129 / 0.3)', word: 'basso' };
-  if (p < 0.2) return { color: '#f59e0b', bg: 'rgb(245 158 11 / 0.10)', border: 'rgb(245 158 11 / 0.3)', word: 'da tenere d’occhio' };
-  if (p < 0.4) return { color: '#fb923c', bg: 'rgb(251 146 60 / 0.10)', border: 'rgb(251 146 60 / 0.3)', word: 'elevato' };
-  return { color: '#ef4444', bg: 'rgb(239 68 68 / 0.10)', border: 'rgb(239 68 68 / 0.3)', word: 'critico' };
+  if (p < 0.05) return { color: 'rgb(var(--ok))', bg: 'rgb(var(--ok) / 0.10)', border: 'rgb(var(--ok) / 0.3)', word: 'basso' };
+  if (p < 0.2) return { color: 'rgb(var(--warn))', bg: 'rgb(var(--warn) / 0.10)', border: 'rgb(var(--warn) / 0.3)', word: 'da tenere d’occhio' };
+  if (p < 0.4) return { color: 'rgb(var(--warn))', bg: 'rgb(var(--warn) / 0.13)', border: 'rgb(var(--warn) / 0.36)', word: 'elevato' };
+  return { color: 'rgb(var(--danger))', bg: 'rgb(var(--danger) / 0.10)', border: 'rgb(var(--danger) / 0.3)', word: 'critico' };
 }
 
 export function RiskPanel({ output, horizon, preview }: { output: SimulationOutput; horizon: number; preview: boolean }) {
@@ -44,7 +44,7 @@ export function RiskPanel({ output, horizon, preview }: { output: SimulationOutp
             su {horizon} mesi · frazione di scenari che toccano la soglia di rovina almeno una volta.
           </p>
           {!agg.convergence.converged && (
-            <div className="mt-3 rounded-lg px-3 py-2 text-xs" style={{ background: 'rgb(245 158 11 / 0.12)', border: '1px solid rgb(245 158 11 / 0.3)', color: '#fbbf24' }}>
+            <div className="mt-3 rounded-lg px-3 py-2 text-xs" style={{ background: 'rgb(var(--warn) / 0.12)', border: '1px solid rgb(var(--warn) / 0.3)', color: 'rgb(var(--warn))' }}>
               La simulazione non è converguta. Aumenta le iterazioni prima di fidarti di questi numeri.
             </div>
           )}
@@ -72,7 +72,7 @@ export function RiskPanel({ output, horizon, preview }: { output: SimulationOutp
           <div className="flex flex-wrap gap-2">
             {flags.map((f) => {
               const info = FLAG_INFO[f];
-              const c = info.tone === 'danger' ? '#ef4444' : info.tone === 'warn' ? '#f59e0b' : '#22cee9';
+              const c = info.tone === 'danger' ? 'rgb(var(--danger))' : info.tone === 'warn' ? 'rgb(var(--warn))' : 'rgb(var(--accent))';
               return (
                 <div key={f} className="group relative">
                   <span className="chip cursor-help" style={{ borderColor: `${c}55`, color: c }}>

@@ -20,5 +20,6 @@ export function toggleTheme(): Theme {
   const next: Theme = currentTheme() === 'dark' ? 'light' : 'dark';
   localStorage.setItem(KEY, next);
   apply(next);
+  window.dispatchEvent(new CustomEvent('kp-theme', { detail: next }));
   return next;
 }

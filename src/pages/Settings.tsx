@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useSession } from '../lib/session.tsx';
 import { useData } from '../lib/data.tsx';
 import { Spinner, EncryptionBadge } from '../components/ui.tsx';
+import { WorkspaceManager } from '../components/managers/WorkspaceManager.tsx';
+import { DEMO } from '../lib/demo.ts';
 
 export function Settings() {
   const { changePassword, email } = useSession();
@@ -52,6 +54,16 @@ export function Settings() {
         </div>
       </section>
 
+      {!DEMO && (
+        <section className="panel p-5">
+          <h2 className="text-sm font-semibold">Workspace</h2>
+          <p className="mt-1 text-xs" style={{ color: 'rgb(var(--text-dim))' }}>
+            Le tue istanze indipendenti (personale, azienda, fondi, immobili…). Nome, icona e colore liberi: il colore tinge tutta l'app quando sei in quel workspace. Crea nuovi workspace dal selettore in alto.
+          </p>
+          <div className="mt-4"><WorkspaceManager /></div>
+        </section>
+      )}
+
       <section className="panel p-5">
         <h2 className="text-sm font-semibold">Cambia password</h2>
         <p className="mt-1 text-xs" style={{ color: 'rgb(var(--text-dim))' }}>
@@ -63,7 +75,7 @@ export function Settings() {
           <label><span className="label mb-1">Conferma</span><input type="password" className="field" value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required /></label>
           <div className="sm:col-span-3 flex items-center gap-3">
             <button className="btn-primary" disabled={busy}>{busy ? <Spinner /> : null}Aggiorna password</button>
-            {msg && <span className="text-xs" style={{ color: msg.ok ? '#6ee7b7' : '#fca5a5' }}>{msg.text}</span>}
+            {msg && <span className="text-xs" style={{ color: msg.ok ? 'rgb(var(--ok))' : 'rgb(var(--danger))' }}>{msg.text}</span>}
           </div>
         </form>
       </section>

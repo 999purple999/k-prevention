@@ -11,23 +11,30 @@
   --border: 255 255 255 / 0.08;
   --border-strong: 255 255 255 / 0.14;
   --text: 236 238 242;
-  --text-dim: 148 163 184;
+  --text-dim: 155 167 186;
   --accent: 34 206 233;
   --grid: 255 255 255 / 0.06;
+  /* colori semantici (adattivi al tema) */
+  --ok: 52 211 153;
+  --warn: 245 158 11;
+  --danger: 244 96 96;
   color-scheme: dark;
 }
 
 :root.light {
-  --bg: 247 248 250;
+  --bg: 246 247 250;
   --bg-soft: 255 255 255;
   --panel: 255 255 255;
-  --panel-2: 248 250 252;
-  --border: 15 23 42 / 0.10;
-  --border-strong: 15 23 42 / 0.16;
-  --text: 17 24 39;
-  --text-dim: 71 85 105;
-  --accent: 8 140 173;
-  --grid: 15 23 42 / 0.07;
+  --panel-2: 244 246 250;
+  --border: 15 23 42 / 0.12;
+  --border-strong: 15 23 42 / 0.20;
+  --text: 15 20 33;
+  --text-dim: 55 68 92;
+  --accent: 8 132 163;
+  --grid: 15 23 42 / 0.09;
+  --ok: 4 120 87;
+  --warn: 176 88 12;
+  --danger: 198 30 30;
   color-scheme: light;
 }
 

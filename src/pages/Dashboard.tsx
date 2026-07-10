@@ -4,7 +4,6 @@ import { useData } from '../lib/data.tsx';
 import { useSimulation } from '../hooks/useSimulation.ts';
 import { validateTaxModel } from '../engine/tax.ts';
 import { RiskPanel } from '../components/RiskPanel.tsx';
-import { PresetBar } from '../components/PresetBar.tsx';
 import { PlanVsActual } from '../components/PlanVsActual.tsx';
 import { FanChart } from '../components/charts/FanChart.tsx';
 import { CashflowBars } from '../components/charts/CashflowBars.tsx';
@@ -122,8 +121,6 @@ export function Dashboard() {
         </div>
       )}
 
-      {data && !isConsolidato && <PresetBar />}
-
       {blocked.blocked ? (
         <div className="panel p-8 text-center">
           <p className="text-sm" style={{ color: 'rgb(var(--text-dim))' }}>{blocked.msg}</p>
@@ -145,7 +142,7 @@ export function Dashboard() {
 
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="lg:col-span-3">
-              <ChartCard title="Capitale cumulato — fascio di traiettorie" subtitle={`Banda p10–p90 e p25–p75, mediana come linea · orizzonte ${horizon} mesi${preview ? ' · anteprima (200 iterazioni)' : ` · ${out.meta.iterations} iterazioni`}`} tall
+              <ChartCard title="Capitale cumulato — fascio di traiettorie" subtitle={`Banda p10–p90 e p25–p75, mediana come linea · orizzonte ${horizon} mesi · ${out.meta.iterations.toLocaleString('it-IT')} scenari${preview ? ' (anteprima)' : ''}`} tall
                 right={<span className="chip">{out.meta.runtimeMs ? `${out.meta.runtimeMs} ms` : ''}</span>}>
                 <FanChart output={out} horizon={horizon} ruinThreshold={data!.simulationConfig.ruinThresholdEUR} preview={preview} />
               </ChartCard>
@@ -156,7 +153,7 @@ export function Dashboard() {
                 <CashflowBars output={out} horizon={horizon} />
               </ChartCard>
             </div>
-            <ChartCard title={`Capitale finale · ${horizon}m`} subtitle="Distribuzione degli scenari; in rosso sotto la soglia di rovina.">
+            <ChartCard title={`Capitale finale · ${horizon}m`} subtitle={`${(out.samples.capitalAtHorizon[String(horizon)]?.length ?? 0).toLocaleString('it-IT')} scenari; in rosso sotto la soglia di rovina.`}>
               <Histogram samples={out.samples.capitalAtHorizon[String(horizon)] ?? []} ruinThreshold={data!.simulationConfig.ruinThresholdEUR} />
             </ChartCard>
 

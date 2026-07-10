@@ -9,6 +9,7 @@ import { Scenarios } from './pages/Scenarios.tsx';
 import { Registra } from './pages/Registra.tsx';
 import { Layout } from './components/Layout.tsx';
 import { MobileLayout } from './components/MobileLayout.tsx';
+import { ThemeController } from './components/ThemeController.tsx';
 
 function Protected({ children }: { children: React.ReactNode }) {
   const { isUnlocked } = useSession();
@@ -21,6 +22,8 @@ function Protected({ children }: { children: React.ReactNode }) {
 
 export function App() {
   return (
+    <>
+    <ThemeController />
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
@@ -30,5 +33,6 @@ export function App() {
       <Route path="/settings" element={<Protected><Settings /></Protected>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
+    </>
   );
 }

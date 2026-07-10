@@ -14,7 +14,9 @@ interface State {
   error: string | null;
 }
 
-const PREVIEW_ITERATIONS = 200;
+// Anteprima con abbastanza scenari da rendere l'istogramma leggibile mentre modifichi
+// (200 erano troppo pochi: barre da 5-6 scenari). 2500 girano comunque in ~0,3s nel worker.
+const PREVIEW_ITERATIONS = 2500;
 
 export function useSimulation() {
   const workerRef = useRef<Worker | null>(null);

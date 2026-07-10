@@ -16,6 +16,7 @@ import {
   CONSOLIDATO_ID,
   typeForWs,
   baseTypeForWs,
+  normalizeWorkspaces,
 } from './workspaces.ts';
 import type {
   IncomeStream,
@@ -96,8 +97,8 @@ interface DataContextValue {
   isConsolidato: boolean;
   readOnly: boolean;
   switchWorkspace: (id: string) => void;
-  createWorkspace: (name: string, kind: Workspace['kind']) => Promise<string>;
-  renameWorkspace: (id: string, name: string) => Promise<void>;
+  createWorkspace: (name: string, emoji: string, color: string) => Promise<string>;
+  renameWorkspace: (id: string, patch: { name?: string; emoji?: string; color?: string }) => Promise<void>;
   deleteWorkspace: (id: string) => Promise<void>;
   reload: () => Promise<void>;
   save: <K extends DataType>(type: K, value: UserData[K]) => Promise<void>;
@@ -229,8 +230,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
       let wsList: Workspace[] = [DEFAULT_WORKSPACE];
       if (wsBlob) {
         try {
-          const list = (await decryptBlob(WS_INDEX_TYPE, wsBlob.encryptedBlob, wsBlob.iv)) as Workspace[];
-          wsList = list.some((w) => w.id === 'default') ? list : [DEFAULT_WORKSPACE, ...list];
+          const list = (await decryptBlob(WS_INDEX_TYPE, wsBlob.encryptedBlob, wsBlob.iv)) as Partial<Workspace>[];
+          const withDefault = list.some((w) => w.id === 'default') ? list : [DEFAULT_WORKSPACE, ...list];
+          wsList = normalizeWorkspaces(withDefault);
           wsVersion.current = wsBlob.lastModified;
         } catch {
           /* usa default */
@@ -469,10 +471,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, [flushPending, reload]);
 
   const createWorkspace = useCallback(
-    async (name: string, kind: Workspace['kind']) => {
+    async (name: string, emoji: string, color: string) => {
       const { newWorkspaceId } = await import('./workspaces.ts');
       const id = newWorkspaceId();
-      const list = [...workspaces, { id, name: name.trim() || 'Nuovo workspace', kind }];
+      const list = [...workspaces, { id, name: name.trim() || 'Nuovo workspace', emoji, color }];
       setWorkspaces(list);
       await persistWorkspaces(list);
       switchWorkspace(id);
@@ -482,8 +484,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   );
 
   const renameWorkspace = useCallback(
-    async (id: string, name: string) => {
-      const list = workspaces.map((w) => (w.id === id ? { ...w, name: name.trim() || w.name } : w));
+    async (id: string, patch: { name?: string; emoji?: string; color?: string }) => {
+      const list = workspaces.map((w) =>
+        w.id === id ? { ...w, name: (patch.name ?? w.name).trim() || w.name, emoji: patch.emoji ?? w.emoji, color: patch.color ?? w.color } : w,
+      );
       setWorkspaces(list);
       await persistWorkspaces(list);
     },

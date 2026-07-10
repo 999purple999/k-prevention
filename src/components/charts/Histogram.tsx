@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ReferenceLine, ResponsiveCo
 import { CHART, axisTick } from './theme.tsx';
 import { fmtEUR } from '../../lib/format.ts';
 
-export function Histogram({ samples, ruinThreshold, bins = 36 }: { samples: number[]; ruinThreshold: number; bins?: number }) {
+export function Histogram({ samples, ruinThreshold, bins = 50 }: { samples: number[]; ruinThreshold: number; bins?: number }) {
   if (!samples.length) return null;
   let min = Infinity;
   let max = -Infinity;
