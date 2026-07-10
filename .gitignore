@@ -34,3 +34,13 @@ Thumbs.db
 # wrangler local secrets
 .dev.vars
 .wrangler/
+
+# artefatti non-progetto (prompt di sviluppo, ricerca, note, screenshot) —
+# non fanno parte dell'app spedibile; tenuti solo in locale
+prompts/
+prompt1out/
+prompt2out/
+PROGRESS.md
+data/gear_final.json
+data/schema.json
+k-prevention-screenshot.png

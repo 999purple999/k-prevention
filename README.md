@@ -214,8 +214,8 @@ npm start
 
 `npm run seed` crea l'utente **Francesco Pernice** (`francesco.pernice@k-prevention.app`) con tutti i dati già
 caricati e cifrati: le fonti di reddito (incluso il part-time da **barista al Bar Commotion**, turni venerdì /
-sabato / domenica in orario aperitivi, 600–800 €/mese), il **setup studio** riconciliato dalle ricerche
-Gemini + Perplexity (`data/gear_final.json`), e il modello fiscale forfettario.
+sabato / domenica in orario aperitivi, 600–800 €/mese), il **setup studio** riconciliato dalle ricerche, e il
+modello fiscale forfettario.
 
 Il seed **stampa la password** (e la salva in `FRANCESCO_CREDENTIALS.txt`, git-ignored). La password non è
 recuperabile: i dati sono cifrati con una chiave che ne deriva. Per un deploy con password nota e riproducibile:
@@ -320,5 +320,5 @@ La chiave che decifra i tuoi dati (la **DEK**) vive **solo nella memoria del bro
 
 ---
 
-Costruito seguendo le tre fasi del progetto (fondamenta+crypto, motore, UI+deploy). Vedi `PROGRESS.md` per il
-dettaglio delle decisioni e degli adattamenti verso Cloudflare (Workers + D1).
+Costruito in tre fasi (fondamenta+crypto, motore Monte Carlo, UI+deploy) e poi esteso a copilota quotidiano
+(consuntivo, scenari, PWA, sync, ponte AI). Deploy su Cloudflare (Workers + D1).
