@@ -8,7 +8,25 @@ import { publish } from '../lib/pubsub.js';
 
 export function dataRouter(store) {
   const r = Router();
-  r.use(requireAuth());
+  r.use(requireAuth(store));
+
+  // -------- gestione sessioni / dispositivi (admin panel dell'utente) --------
+  r.get('/sessions', ah(async (req, res) => {
+    const now = Date.now();
+    const rows = await store.listSessions(req.userId);
+    res.json(
+      rows.map((s) => ({
+        id: s.id, device: s.device, createdAt: s.created_at, lastSeen: s.last_seen, expiresAt: s.expires_at,
+        revoked: s.revoked_at != null, expired: s.expires_at != null && s.expires_at < now, current: s.id === req.sid,
+      })),
+    );
+  }));
+  r.post('/sessions/:id/revoke', ah(async (req, res) => {
+    res.json({ ok: await store.revokeSession(req.userId, req.params.id, Date.now()) });
+  }));
+  r.post('/sessions/revoke-others', ah(async (req, res) => {
+    res.json({ ok: true, revoked: await store.revokeOtherSessions(req.userId, req.sid, Date.now()) });
+  }));
 
   // GET /api/data — bootstrap: tutti i blob dell'utente in un colpo.
   r.get('/data', ah(async (req, res) => {

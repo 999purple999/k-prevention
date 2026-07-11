@@ -76,20 +76,18 @@ export function constantTimeReject(authProof) {
 }
 
 const JWT_ALG = 'HS256';
-const SESSION_TTL = '30d';
 
-export async function signSession(userId) {
-  return new SignJWT({ sub: userId })
-    .setProtectedHeader({ alg: JWT_ALG })
-    .setIssuedAt()
-    .setExpirationTime(SESSION_TTL)
-    .sign(secretBytes());
+export async function signSession(userId, jti, expiresAtMs) {
+  let b = new SignJWT({ sub: userId, jti }).setProtectedHeader({ alg: JWT_ALG }).setIssuedAt();
+  if (expiresAtMs != null) b = b.setExpirationTime(Math.floor(expiresAtMs / 1000));
+  return b.sign(secretBytes());
 }
 
 export async function verifySession(token) {
   try {
     const { payload } = await jwtVerify(token, secretBytes(), { algorithms: [JWT_ALG] });
-    return typeof payload.sub === 'string' ? payload.sub : null;
+    if (typeof payload.sub !== 'string' || typeof payload.jti !== 'string') return null;
+    return { sub: payload.sub, jti: payload.jti };
   } catch {
     return null;
   }

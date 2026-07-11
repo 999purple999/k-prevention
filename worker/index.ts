@@ -39,17 +39,50 @@ const wsIdOr = (v: unknown, fallback = 'default') => (typeof v === 'string' && /
 const app = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 const COOKIE = 'kp_session';
-function setSession(c: any, token: string) {
-  const secure = new URL(c.req.url).protocol === 'https:';
-  setCookie(c, COOKIE, token, { httpOnly: true, secure, sameSite: 'Strict', path: '/', maxAge: 60 * 60 * 24 * 30 });
+// Durate ammesse (giorni). 0 = fino a revoca esplicita (nessuna scadenza).
+const DURATIONS = new Set([30, 90, 180, 365, 0]);
+const normDuration = (d: unknown, fallback: number): number => {
+  const n = Number(d);
+  return Number.isFinite(n) && DURATIONS.has(n) ? n : fallback;
+};
+const expiryFor = (days: number, now: number): number | null => (days === 0 ? null : now + days * 86400 * 1000);
+const cookieMaxAge = (days: number): number => (days === 0 ? 60 * 60 * 24 * 3650 : days * 86400);
+function deviceLabel(ua: string | undefined): string {
+  if (!ua) return 'Dispositivo sconosciuto';
+  const os = /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'macOS' : /Android/.test(ua) ? 'Android' : /iPhone|iPad|iOS/.test(ua) ? 'iOS' : /Linux/.test(ua) ? 'Linux' : 'Altro';
+  const br = /Edg\//.test(ua) ? 'Edge' : /OPR\/|Opera/.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  return `${br} · ${os}`;
 }
 
-// Middleware di autenticazione: popola userId dal cookie httpOnly.
+function setSession(c: any, token: string, maxAge: number) {
+  const secure = new URL(c.req.url).protocol === 'https:';
+  setCookie(c, COOKIE, token, { httpOnly: true, secure, sameSite: 'Strict', path: '/', maxAge });
+}
+
+/** Crea una sessione revocabile e imposta il cookie. */
+async function startSession(c: any, store: ReturnType<typeof createD1Store>, userId: string, days: number) {
+  const now = Date.now();
+  const jti = newId();
+  const expires = expiryFor(days, now);
+  await store.createSession({ id: jti, user_id: userId, created_at: now, expires_at: expires, revoked_at: null, device: deviceLabel(c.req.header('user-agent')), last_seen: now });
+  setSession(c, await signSession(c.env.SERVER_SECRET, userId, jti, expires), cookieMaxAge(days));
+}
+
+// Middleware di autenticazione: verifica firma + stato della sessione nel DB (revocata/scaduta → 401).
 async function requireAuth(c: any, next: any) {
   const token = getCookie(c, COOKIE);
-  const userId = token ? await verifySession(c.env.SERVER_SECRET, token) : null;
-  if (!userId) return c.json({ error: 'non autenticato' }, 401);
-  c.set('userId', userId);
+  const v = token ? await verifySession(c.env.SERVER_SECRET, token) : null;
+  if (!v) return c.json({ error: 'non autenticato' }, 401);
+  const store = createD1Store(c.env.DB);
+  const s = await store.getSession(v.jti);
+  const now = Date.now();
+  if (!s || s.user_id !== v.sub || s.revoked_at != null || (s.expires_at != null && s.expires_at < now)) {
+    deleteCookie(c, COOKIE, { path: '/' });
+    return c.json({ error: 'sessione non valida o revocata' }, 401);
+  }
+  c.set('userId', v.sub);
+  c.set('sid', v.jti);
+  if (now - s.last_seen > 300_000) await store.touchSession(v.jti, now); // throttle scritture last_seen
   await next();
 }
 
@@ -74,7 +107,7 @@ app.post('/api/auth/register', async (c) => {
     dek_iv: dekIv,
     created_at: Date.now(),
   });
-  setSession(c, await signSession(c.env.SERVER_SECRET, id));
+  await startSession(c, store, id, 30);
   return c.json({ userId: id }, 201);
 });
 
@@ -88,7 +121,7 @@ app.post('/api/auth/salts', async (c) => {
 });
 
 app.post('/api/auth/login', async (c) => {
-  const { email, authProof } = await c.req.json().catch(() => ({}));
+  const { email, authProof, durationDays } = await c.req.json().catch(() => ({}));
   if (!email || !authProof) return c.json({ error: 'credenziali mancanti' }, 400);
   const store = createD1Store(c.env.DB);
   const user = await store.getUserByEmailLookup(await emailLookup(c.env.SERVER_SECRET, email));
@@ -97,20 +130,65 @@ app.post('/api/auth/login', async (c) => {
     return c.json({ error: 'credenziali non valide' }, 401);
   }
   if (!(await verifyAuthProof(c.env.SERVER_SECRET, authProof, user.auth_hash))) return c.json({ error: 'credenziali non valide' }, 401);
-  setSession(c, await signSession(c.env.SERVER_SECRET, user.id));
-  return c.json({ userId: user.id, wrappedDek: user.wrapped_dek, dekIv: user.dek_iv });
+  // durata: dal body se valida, altrimenti la preferenza dell'utente, altrimenti 30 giorni.
+  const days = normDuration(durationDays, user.session_duration_days ?? 30);
+  await startSession(c, store, user.id, days);
+  return c.json({ userId: user.id, wrappedDek: user.wrapped_dek, dekIv: user.dek_iv, sessionDurationDays: user.session_duration_days ?? 30 });
 });
 
-app.post('/api/auth/logout', (c) => {
+app.post('/api/auth/logout', async (c) => {
+  const token = getCookie(c, COOKIE);
+  const v = token ? await verifySession(c.env.SERVER_SECRET, token) : null;
+  if (v) await createD1Store(c.env.DB).revokeSession(v.sub, v.jti, Date.now()); // logout = revoca (irreversibile)
   deleteCookie(c, COOKIE, { path: '/' });
   return c.json({ ok: true });
+});
+
+// -------- gestione sessioni / dispositivi (admin panel dell'utente) --------
+app.get('/api/sessions', requireAuth, async (c) => {
+  const store = createD1Store(c.env.DB);
+  const sid = c.get('sid');
+  const now = Date.now();
+  const rows = await store.listSessions(c.get('userId'));
+  return c.json(
+    rows.map((s) => ({
+      id: s.id,
+      device: s.device,
+      createdAt: s.created_at,
+      lastSeen: s.last_seen,
+      expiresAt: s.expires_at,
+      revoked: s.revoked_at != null,
+      expired: s.expires_at != null && s.expires_at < now,
+      current: s.id === sid,
+    })),
+  );
+});
+app.post('/api/sessions/:id/revoke', requireAuth, async (c) => {
+  const ok = await createD1Store(c.env.DB).revokeSession(c.get('userId'), c.req.param('id'), Date.now());
+  return c.json({ ok });
+});
+app.post('/api/sessions/revoke-others', requireAuth, async (c) => {
+  const n = await createD1Store(c.env.DB).revokeOtherSessions(c.get('userId'), c.get('sid'), Date.now());
+  return c.json({ ok: true, revoked: n });
+});
+// Preferenza di durata (in Impostazioni): aggiorna anche la scadenza della sessione corrente.
+app.patch('/api/auth/session-duration', requireAuth, async (c) => {
+  const { days } = await c.req.json().catch(() => ({}));
+  const d = normDuration(days, -1);
+  if (d < 0) return c.json({ error: 'durata non valida' }, 400);
+  const store = createD1Store(c.env.DB);
+  await store.setSessionDuration(c.get('userId'), d);
+  const expires = expiryFor(d, Date.now());
+  await store.updateSessionExpiry(c.get('sid'), expires);
+  setSession(c, await signSession(c.env.SERVER_SECRET, c.get('userId'), c.get('sid'), expires), cookieMaxAge(d));
+  return c.json({ ok: true, days: d });
 });
 
 app.get('/api/auth/session', requireAuth, async (c) => {
   const store = createD1Store(c.env.DB);
   const user = await store.getUserById(c.get('userId'));
   if (!user) return c.json({ error: 'sessione non valida' }, 401);
-  return c.json({ userId: user.id, wrappedDek: user.wrapped_dek, dekIv: user.dek_iv });
+  return c.json({ userId: user.id, wrappedDek: user.wrapped_dek, dekIv: user.dek_iv, sessionDurationDays: user.session_duration_days ?? 30 });
 });
 
 app.patch('/api/auth/password', requireAuth, async (c) => {

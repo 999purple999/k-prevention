@@ -60,6 +60,14 @@ function migrate(db) {
   add('is_main', 'INTEGER NOT NULL DEFAULT 0');
   add('workspace_id', "TEXT NOT NULL DEFAULT 'default'");
   db.exec('CREATE INDEX IF NOT EXISTS idx_simulations_ws ON simulations(user_id, workspace_id)');
+  // Sessioni revocabili + durata configurabile (mirror di migrations/0003_sessions.sql).
+  const userCols = new Set(db.prepare("PRAGMA table_info('users')").all().map((c) => c.name));
+  if (!userCols.has('session_duration_days')) db.exec('ALTER TABLE users ADD COLUMN session_duration_days INTEGER NOT NULL DEFAULT 30');
+  db.exec(`CREATE TABLE IF NOT EXISTS sessions (
+    id TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at INTEGER NOT NULL,
+    expires_at INTEGER, revoked_at INTEGER, device TEXT, last_seen INTEGER NOT NULL
+  )`);
+  db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)');
 }
 
 export function createSqliteStore(path) {
@@ -133,6 +141,35 @@ export function createSqliteStore(path) {
     },
     async updateUserAuth(id, a) {
       stmts.updateAuth.run(a.auth_hash, a.auth_salt, a.kek_salt, a.wrapped_dek, a.dek_iv, id);
+    },
+    async setSessionDuration(id, days) {
+      db.prepare('UPDATE users SET session_duration_days = ? WHERE id = ?').run(days, id);
+    },
+
+    // -------- sessioni revocabili (mirror del Worker) --------
+    async createSession(s) {
+      db.prepare('INSERT INTO sessions (id, user_id, created_at, expires_at, revoked_at, device, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .run(s.id, s.user_id, s.created_at, s.expires_at ?? null, s.revoked_at ?? null, s.device ?? null, s.last_seen);
+    },
+    async getSession(id) {
+      return db.prepare('SELECT * FROM sessions WHERE id = ?').get(id) ?? null;
+    },
+    async listSessions(userId) {
+      return db.prepare('SELECT * FROM sessions WHERE user_id = ? ORDER BY last_seen DESC').all(userId);
+    },
+    async touchSession(id, ts) {
+      db.prepare('UPDATE sessions SET last_seen = ? WHERE id = ?').run(ts, id);
+    },
+    async revokeSession(userId, id, ts) {
+      const res = db.prepare('UPDATE sessions SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL').run(ts, id, userId);
+      return res.changes > 0;
+    },
+    async revokeOtherSessions(userId, keepId, ts) {
+      const res = db.prepare('UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND id != ? AND revoked_at IS NULL').run(ts, userId, keepId);
+      return res.changes;
+    },
+    async updateSessionExpiry(id, expiresAt) {
+      db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').run(expiresAt ?? null, id);
     },
 
     async getData(userId, dataType) {

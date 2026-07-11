@@ -12,17 +12,26 @@ export const ah = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)
 const COOKIE_NAME = 'kp_session';
 const isProd = () => process.env.NODE_ENV === 'production';
 
-export function setSessionCookie(res, token) {
+export function setSessionCookie(res, token, maxAge = 60 * 60 * 24 * 30) {
   res.setHeader(
     'Set-Cookie',
-    serializeCookie(COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: isProd(),
-      sameSite: 'strict',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 30, // 30 giorni
-    }),
+    serializeCookie(COOKIE_NAME, token, { httpOnly: true, secure: isProd(), sameSite: 'strict', path: '/', maxAge }),
   );
+}
+
+// Durate ammesse (giorni). 0 = fino a revoca esplicita.
+const DURATIONS = new Set([30, 90, 180, 365, 0]);
+export const normDuration = (d, fallback) => {
+  const n = Number(d);
+  return Number.isFinite(n) && DURATIONS.has(n) ? n : fallback;
+};
+export const expiryFor = (days, now) => (days === 0 ? null : now + days * 86400 * 1000);
+export const cookieMaxAge = (days) => (days === 0 ? 60 * 60 * 24 * 3650 : days * 86400);
+export function deviceLabel(ua) {
+  if (!ua) return 'Dispositivo sconosciuto';
+  const os = /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'macOS' : /Android/.test(ua) ? 'Android' : /iPhone|iPad|iOS/.test(ua) ? 'iOS' : /Linux/.test(ua) ? 'Linux' : 'Altro';
+  const br = /Edg\//.test(ua) ? 'Edge' : /OPR\/|Opera/.test(ua) ? 'Opera' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  return `${br} · ${os}`;
 }
 
 export function clearSessionCookie(res) {
@@ -34,13 +43,24 @@ export function clearSessionCookie(res) {
 
 /** Middleware: richiede una sessione valida; popola req.userId. Il JWT vive solo nel
  *  cookie httpOnly, mai in localStorage. */
-export function requireAuth() {
+export function requireAuth(store) {
   return async (req, res, next) => {
     const cookies = parseCookie(req.headers.cookie || '');
     const token = cookies[COOKIE_NAME];
-    const userId = token ? await verifySession(token) : null;
-    if (!userId) return res.status(401).json({ error: 'non autenticato' });
-    req.userId = userId;
+    const v = token ? await verifySession(token) : null;
+    if (!v) return res.status(401).json({ error: 'non autenticato' });
+    // Verifica lo stato della sessione nel DB: revocata/scaduta → 401 (mirror del Worker).
+    if (store) {
+      const s = await store.getSession(v.jti);
+      const now = Date.now();
+      if (!s || s.user_id !== v.sub || s.revoked_at != null || (s.expires_at != null && s.expires_at < now)) {
+        clearSessionCookie(res);
+        return res.status(401).json({ error: 'sessione non valida o revocata' });
+      }
+      if (now - s.last_seen > 300_000) await store.touchSession(v.jti, now);
+      req.sid = v.jti;
+    }
+    req.userId = v.sub;
     next();
   };
 }

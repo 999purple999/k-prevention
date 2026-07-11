@@ -17,6 +17,7 @@ export function Login() {
   const [email, setEmail] = useState(localStorage.getItem('kp_email') ?? '');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [duration, setDuration] = useState(30);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
@@ -30,7 +31,7 @@ export function Login() {
     try {
       setStatus('Derivazione della chiave (PBKDF2, 600k iterazioni)…');
       if (mode === 'login') {
-        await login(email.trim(), password);
+        await login(email.trim(), password, duration);
       } else {
         const base = defaultUserData(name.trim() || 'Nuovo utente');
         await register(email.trim(), password, {
@@ -114,6 +115,18 @@ export function Login() {
                 <div>
                   <label className="label mb-1">Conferma password</label>
                   <input className="field" type="password" required value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="••••••••••" autoComplete="new-password" />
+                </div>
+              )}
+              {mode === 'login' && (
+                <div>
+                  <label className="label mb-1">Resta connesso per</label>
+                  <select className="field" value={duration} onChange={(e) => setDuration(Number(e.target.value))}>
+                    <option value={30}>1 mese</option>
+                    <option value={90}>3 mesi</option>
+                    <option value={180}>6 mesi</option>
+                    <option value={365}>1 anno</option>
+                    <option value={0}>Fino a revoca esplicita</option>
+                  </select>
                 </div>
               )}
 

@@ -4,6 +4,7 @@ import { useData } from '../lib/data.tsx';
 import { Spinner, EncryptionBadge } from '../components/ui.tsx';
 import { WorkspaceManager } from '../components/managers/WorkspaceManager.tsx';
 import { InvestmentManager } from '../components/managers/InvestmentManager.tsx';
+import { SessionManager } from '../components/managers/SessionManager.tsx';
 import { DEMO } from '../lib/demo.ts';
 
 export function Settings() {
@@ -62,6 +63,16 @@ export function Settings() {
             Le tue istanze indipendenti (personale, azienda, fondi, immobili…). Nome, icona e colore liberi: il colore tinge tutta l'app quando sei in quel workspace. Crea nuovi workspace dal selettore in alto.
           </p>
           <div className="mt-4"><WorkspaceManager /></div>
+        </section>
+      )}
+
+      {!DEMO && (
+        <section className="panel p-5">
+          <h2 className="text-sm font-semibold">Sessioni e dispositivi</h2>
+          <p className="mt-1 text-xs" style={{ color: 'rgb(var(--text-dim))' }}>
+            Scegli quanto tenere attivo il login e gestisci i dispositivi connessi. Revocare una sessione disconnette quel dispositivo in modo irreversibile.
+          </p>
+          <div className="mt-4"><SessionManager /></div>
         </section>
       )}
 

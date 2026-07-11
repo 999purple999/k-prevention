@@ -26,7 +26,7 @@ interface SessionState {
 
 interface SessionContextValue extends SessionState {
   isUnlocked: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, durationDays?: number) => Promise<void>;
   register: (email: string, password: string, initialData?: Record<string, unknown>) => Promise<void>;
   logout: () => Promise<void>;
   changePassword: (oldPassword: string, newPassword: string) => Promise<void>;
@@ -44,10 +44,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       : { userId: null, email: localStorage.getItem(EMAIL_KEY), dek: null },
   );
 
-  const login = useCallback(async (email: string, password: string) => {
+  const login = useCallback(async (email: string, password: string, durationDays?: number) => {
     const { authSalt, kekSalt } = await api.salts(email);
     const authProof = await deriveAuthProof(password, authSalt);
-    const { userId, wrappedDek, dekIv } = await api.login(email, authProof);
+    const { userId, wrappedDek, dekIv } = await api.login(email, authProof, durationDays);
     const kek = await deriveKEK(password, kekSalt);
     const dek = await unwrapDEK(wrappedDek, dekIv, kek); // fallisce se la password è sbagliata
     localStorage.setItem(EMAIL_KEY, email);

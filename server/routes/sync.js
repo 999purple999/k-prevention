@@ -3,12 +3,12 @@ import { Router } from 'express';
 import { requireAuth } from '../lib/http.js';
 import { subscribe } from '../lib/pubsub.js';
 
-export function syncRouter() {
+export function syncRouter(store) {
   const r = Router();
 
   // GET /api/sync/stream — Server-Sent Events. Il client si abbona e riceve
   // { type, lastModified } quando un altro dispositivo modifica i dati.
-  r.get('/sync/stream', requireAuth(), (req, res) => {
+  r.get('/sync/stream', requireAuth(store), (req, res) => {
     res.set({
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',

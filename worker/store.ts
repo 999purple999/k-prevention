@@ -10,6 +10,17 @@ export interface UserRow {
   wrapped_dek: string;
   dek_iv: string;
   created_at: number;
+  session_duration_days?: number; // 0 = fino a revoca esplicita
+}
+
+export interface SessionRow {
+  id: string;
+  user_id: string;
+  created_at: number;
+  expires_at: number | null;
+  revoked_at: number | null;
+  device: string | null;
+  last_seen: number;
 }
 
 export function createD1Store(db: D1Database) {
@@ -33,6 +44,48 @@ export function createD1Store(db: D1Database) {
         .prepare('UPDATE users SET auth_hash = ?, auth_salt = ?, kek_salt = ?, wrapped_dek = ?, dek_iv = ? WHERE id = ?')
         .bind(a.auth_hash, a.auth_salt, a.kek_salt, a.wrapped_dek, a.dek_iv, id)
         .run();
+    },
+    async setSessionDuration(id: string, days: number): Promise<void> {
+      await db.prepare('UPDATE users SET session_duration_days = ? WHERE id = ?').bind(days, id).run();
+    },
+
+    // -------- sessioni revocabili --------
+    async createSession(s: SessionRow): Promise<void> {
+      await db
+        .prepare('INSERT INTO sessions (id, user_id, created_at, expires_at, revoked_at, device, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        .bind(s.id, s.user_id, s.created_at, s.expires_at, s.revoked_at, s.device, s.last_seen)
+        .run();
+    },
+    async getSession(id: string): Promise<SessionRow | null> {
+      return db.prepare('SELECT * FROM sessions WHERE id = ?').bind(id).first<SessionRow>();
+    },
+    async listSessions(userId: string): Promise<SessionRow[]> {
+      const { results } = await db
+        .prepare('SELECT * FROM sessions WHERE user_id = ? ORDER BY last_seen DESC')
+        .bind(userId)
+        .all<SessionRow>();
+      return results ?? [];
+    },
+    async touchSession(id: string, ts: number): Promise<void> {
+      await db.prepare('UPDATE sessions SET last_seen = ? WHERE id = ?').bind(ts, id).run();
+    },
+    /** Revoca irreversibile: imposta revoked_at solo se non già revocata, e solo per l'utente. */
+    async revokeSession(userId: string, id: string, ts: number): Promise<boolean> {
+      const res = await db
+        .prepare('UPDATE sessions SET revoked_at = ? WHERE id = ? AND user_id = ? AND revoked_at IS NULL')
+        .bind(ts, id, userId)
+        .run();
+      return (res.meta?.changes ?? 0) > 0;
+    },
+    async revokeOtherSessions(userId: string, keepId: string, ts: number): Promise<number> {
+      const res = await db
+        .prepare('UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND id != ? AND revoked_at IS NULL')
+        .bind(ts, userId, keepId)
+        .run();
+      return res.meta?.changes ?? 0;
+    },
+    async updateSessionExpiry(id: string, expiresAt: number | null): Promise<void> {
+      await db.prepare('UPDATE sessions SET expires_at = ? WHERE id = ?').bind(expiresAt, id).run();
     },
 
     async getData(userId: string, dataType: string) {

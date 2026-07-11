@@ -66,20 +66,23 @@ export async function constantTimeReject(secret: string, authProof: string): Pro
 }
 
 const JWT_ALG = 'HS256';
-const SESSION_TTL = '30d';
-
-export async function signSession(secret: string, userId: string): Promise<string> {
-  return new SignJWT({ sub: userId })
-    .setProtectedHeader({ alg: JWT_ALG })
-    .setIssuedAt()
-    .setExpirationTime(SESSION_TTL)
-    .sign(encoder.encode(secret));
+/**
+ * Firma un JWT di sessione con un `jti` (id sessione) e una scadenza opzionale.
+ * expiresAtMs = null → nessuna scadenza nel token (solo il DB può revocarla/scaderla).
+ */
+export async function signSession(secret: string, userId: string, jti: string, expiresAtMs: number | null): Promise<string> {
+  let b = new SignJWT({ sub: userId, jti }).setProtectedHeader({ alg: JWT_ALG }).setIssuedAt();
+  if (expiresAtMs != null) b = b.setExpirationTime(Math.floor(expiresAtMs / 1000));
+  return b.sign(encoder.encode(secret));
 }
 
-export async function verifySession(secret: string, token: string): Promise<string | null> {
+/** Verifica firma + scadenza del token. Ritorna { sub, jti } oppure null. La revoca
+ *  (stato lato server) è controllata a parte in requireAuth. */
+export async function verifySession(secret: string, token: string): Promise<{ sub: string; jti: string } | null> {
   try {
     const { payload } = await jwtVerify(token, encoder.encode(secret), { algorithms: [JWT_ALG] });
-    return typeof payload.sub === 'string' ? payload.sub : null;
+    if (typeof payload.sub !== 'string' || typeof payload.jti !== 'string') return null;
+    return { sub: payload.sub, jti: payload.jti };
   } catch {
     return null;
   }

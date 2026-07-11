@@ -40,6 +40,18 @@ export interface AuthResult {
   userId: string;
   wrappedDek: string;
   dekIv: string;
+  sessionDurationDays?: number;
+}
+
+export interface DeviceSession {
+  id: string;
+  device: string | null;
+  createdAt: number;
+  lastSeen: number;
+  expiresAt: number | null;
+  revoked: boolean;
+  expired: boolean;
+  current: boolean;
 }
 export interface StoredBlob {
   encryptedBlob: string;
@@ -68,9 +80,13 @@ export const api = {
   salts: (email: string) => req<Salts>('POST', '/api/auth/salts', { email }),
   register: (b: { email: string; authProof: string; authSalt: string; kekSalt: string; wrappedDek: string; dekIv: string }) =>
     req<{ userId: string }>('POST', '/api/auth/register', b),
-  login: (email: string, authProof: string) => req<AuthResult>('POST', '/api/auth/login', { email, authProof }),
+  login: (email: string, authProof: string, durationDays?: number) => req<AuthResult>('POST', '/api/auth/login', { email, authProof, durationDays }),
   session: () => req<AuthResult>('GET', '/api/auth/session'),
   logout: () => req<{ ok: boolean }>('POST', '/api/auth/logout'),
+  listSessions: () => req<DeviceSession[]>('GET', '/api/sessions'),
+  revokeSession: (id: string) => req<{ ok: boolean }>('POST', `/api/sessions/${id}/revoke`),
+  revokeOtherSessions: () => req<{ ok: boolean; revoked: number }>('POST', '/api/sessions/revoke-others'),
+  setSessionDuration: (days: number) => req<{ ok: boolean; days: number }>('PATCH', '/api/auth/session-duration', { days }),
   changePassword: (b: {
     oldAuthProof: string;
     newAuthProof: string;
